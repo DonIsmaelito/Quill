@@ -1,0 +1,13 @@
+{
+  "original_document": "./test_documents/sample_document.pdf",
+  "removed_variables": [
+    {
+      "original": "Dummy",
+      "placeholder": "{name_0}",
+      "type": "name",
+      "page": 1,
+      "line": 1
+    }
+  ],
+  "template_path": "./test_templates/sample_document_template.txt"
+}

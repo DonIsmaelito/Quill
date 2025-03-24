@@ -12,6 +12,8 @@ from find_label_coords import find_label_coords
 """Example script usage: python3 src/document_creation/write_pdf.py SAMPLE_PNG_PATH SAMPLE_JSON"""
 SAMPLE_PNG_PATH = "./W-2.png"
 
+FORM_PATH = "rc/document_creation/images/W-2.pdf"
+
 SAMPLE_JSON = '{ "Employee social security number": "000-11-2222", \
                 "Employer identification number": "999-888-777", \
                 "Wages, tips, other compensation": "64000" }'
@@ -19,7 +21,10 @@ SAMPLE_JSON = '{ "Employee social security number": "000-11-2222", \
 MODEL_NAME = "gpt-4o-mini" # configure API key by running: `export OPENAI_API_KEY="your_api_key_here"`
 
 # Vertical padding to adjust text placement (negative value moves text down)
-Y_PADDING = 20
+Y_PADDING = 35
+
+# Horizontal padding to adjust text placement
+X_PADDING = 10
 
 # Configure logging
 logging.basicConfig(
@@ -31,14 +36,62 @@ SYSTEM_PROMPT = f"""You are a helpful, form-filling assistant. The user will pro
 image of a form, as well as a list of fields that need to be filled in along with their label 
 pixel coordinates on the page. For each field, your task is to identify the x,y pixel coordinates 
 of the blank corresponding to that field, where the user could insert a left-justified answer. 
-To do this, first determine where the answer should be written relative to the question 
-(i.e. above, right, below). Then, consider the size of the image, and then choose coordinates which
-are far enough in the right direction such that there is a sizeable gap between the label and answer.
-Lastly, output your response as a list of tuples (no additional text), where the 
+
+To do this:
+1. First, carefully examine the form layout and identify where each field's input area is located
+2. For each field, determine the exact position where text should be placed:
+   - For fields with boxes or lines, place text slightly above the line/box
+   - For fields with no visible input area, place text to the right of the label
+   - Ensure there's enough space between the label and the input text
+3. Consider the form's overall layout and spacing patterns
+4. Output your response as a list of tuples (no additional text), where the 
 n-th tuple contains the x,y pixel coordinates of the top-left corner of the n-th field's blank.
+
 For example, if the user input was: 'name: (x1, y1), EIN: (x2, y2), cell: (x3, y3)' respectively, 
 your output should be of the exact format: [(new_x1, new_y1),(new_x2, new_y2),(new_x3, new_y3)]."""
 
+# Form templates with predefined coordinates
+FORM_TEMPLATES = {
+    "W-2": {
+        "a Employee social security number": (150, 55),
+        "b Employer identification number": (150, 105),
+        "c Employer name, address, and ZIP code": (150, 155),
+        "d Control number": (150, 275),
+        "e Employee first name and initial": (150, 325),
+        "Last name": (400, 325),
+        "f Employee address and ZIP code": (150, 375),
+        "1 Wages, tips, other compensation": (600, 105),
+        "2 Federal income tax withheld": (900, 105),
+        "3 Social security wages": (600, 145),
+        "4 Social security tax withheld": (900, 145),
+        "5 Medicare wages and tips": (600, 185),
+        "6 Medicare tax withheld": (900, 185),
+        "7 Social security tips": (600, 225),
+        "8 Allocated tips": (900, 225),
+        "9": (600, 265),  # Optional field
+        "10 Dependent care benefits": (900, 275),
+        "11 Nonqualified plans": (600, 325),
+        "12a Code": (600, 365),
+        "12a Amount": (700, 365),
+        "12b Code": (600, 385),
+        "12b Amount": (700, 385),
+        "12c Code": (600, 405),
+        "12c Amount": (700, 405),
+        "12d Code": (600, 425),
+        "12d Amount": (700, 425),
+        "13 Statutory employee": (620, 445),  # Checkbox
+        "13 Retirement plan": (720, 445),    # Checkbox
+        "13 Third-party sick pay": (820, 445),  # Checkbox
+        "14 Other": (600, 465),
+        "15 State": (50, 475),
+        "Employer state ID number": (200, 475),
+        "16 State wages, tips, etc.": (400, 475),
+        "17 State income tax": (600, 475),
+        "18 Local wages, tips, etc.": (400, 525),
+        "19 Local income tax": (600, 525),
+        "20 Locality name": (800, 525)
+    }
+}
 
 def encode_image(img_path):
     """"Create a base64 encoding of an image file."""
@@ -73,10 +126,14 @@ def process_image_path(form_path):
 
 
 def overlay_text(img_path, text_list, coordinates_list, 
-                 font_path="./fonts/arial/arial.ttf", font_size=20):
+                 font_path="./src/document_creation/fonts/arial/arial.ttf", font_size=20):
     """"Overlay text on an image at the given coordinates."""
     image = Image.open(img_path)
     draw = ImageDraw.Draw(image)
+    
+    # Calculate font size based on image dimensions
+    x, y = image.size
+    font_size = int(8 + (x / 1000) * 8)  # Adjusted formula for better scaling
     font = ImageFont.truetype(font_path, font_size) if font_path else ImageFont.load_default()
     
     for text, (x, y) in zip(text_list, coordinates_list):
@@ -88,11 +145,28 @@ def overlay_text(img_path, text_list, coordinates_list,
         elif not isinstance(text, (str, bytes)):
             text = str(text)
             
-        # Apply Y_PADDING to move text down
-        adjusted_y = y + Y_PADDING
-        draw.text((x, adjusted_y), text, fill="black", font=font)
+        # Handle checkboxes
+        if text == "X" or text == "[x]":
+            # Draw an X in a small box
+            box_size = font_size
+            draw.rectangle([x + X_PADDING, y + Y_PADDING, x + X_PADDING + box_size, y + Y_PADDING + box_size], outline="black")
+            draw.text((x + X_PADDING + box_size/4, y + Y_PADDING), "X", fill="black", font=font)
+        else:
+            # Apply both X and Y padding to adjust text placement
+            adjusted_x = x + X_PADDING
+            adjusted_y = y + Y_PADDING
+            draw.text((adjusted_x, adjusted_y), text, fill="black", font=font)
     
     return image
+
+
+def detect_form_type(img_path):
+    """Detect the type of form based on the image content."""
+    image = Image.open(img_path)
+    # For now, just check the filename
+    if "W-2" in img_path:
+        return "W-2"
+    return None
 
 
 def populate_form(fields, label_coords, img_path):
@@ -101,6 +175,20 @@ def populate_form(fields, label_coords, img_path):
     and an image path. The function calls an LLM to identify the coordinates of the blanks where 
     the values should be filled in, and then calls overlay_text() to create a filled pdf.
     """
+    # Try to detect form type and use template if available
+    form_type = detect_form_type(img_path)
+    if form_type and form_type in FORM_TEMPLATES:
+        # Use template coordinates
+        blank_coords = []
+        for field in fields:
+            if field in FORM_TEMPLATES[form_type]:
+                blank_coords.append(FORM_TEMPLATES[form_type][field])
+            else:
+                # Use fallback coordinates for unknown fields
+                blank_coords.append((300, 300))
+        return overlay_text(img_path, list(fields.values()), blank_coords)
+    
+    # If no template available, use the original LLM-based approach
     client = OpenAI()
     base64_image = encode_image(img_path)
     
@@ -213,6 +301,35 @@ def normalize_and_match_fields(json_data, label_coords):
 
     # Create a normalized mapping of common field variations
     field_variations = {
+        # W-2 Form specific fields
+        "employeessocialsecuritynumber": ["a Employee social security number", "Employee's social security number", "social security number"],
+        "employeridentificationnumber": ["b Employer identification number", "Employer identification number (EIN)", "EIN"],
+        "employernameaddressandzipcode": ["c Employer name, address, and ZIP code", "Employer's name, address, and ZIP code"],
+        "controlnumber": ["d Control number", "Control number"],
+        "employeefirstnameandinitial": ["e Employee first name and initial", "Employee's first name and initial"],
+        "lastname": ["Last name", "Employee's last name"],
+        "employeeaddressandzipcode": ["f Employee address and ZIP code", "Employee's address and ZIP code"],
+        "wagestipsothercompensation": ["1 Wages, tips, other compensation", "Wages, tips, and other compensation"],
+        "federalincometaxwithheld": ["2 Federal income tax withheld"],
+        "socialsecuritywages": ["3 Social security wages"],
+        "socialsecuritytaxwithheld": ["4 Social security tax withheld"],
+        "medicarewagesandtips": ["5 Medicare wages and tips"],
+        "medicaretaxwithheld": ["6 Medicare tax withheld"],
+        "socialsecuritytips": ["7 Social security tips"],
+        "allocatedtips": ["8 Allocated tips"],
+        "dependentcarebenefits": ["10 Dependent care benefits"],
+        "nonqualifiedplans": ["11 Nonqualified plans"],
+        "state": ["15 State"],
+        "employerstateidnumber": ["Employer state ID number", "State employer ID"],
+        "statewages": ["16 State wages, tips, etc.", "State wages"],
+        "stateincome": ["17 State income tax"],
+        "localwages": ["18 Local wages, tips, etc.", "Local wages"],
+        "localincometax": ["19 Local income tax"],
+        "localityname": ["20 Locality name"],
+    }
+    
+    # Add the existing field variations
+    field_variations.update({
         # Personal information
         "patientfirstname": ["first name", "firstname", "fname", "patient first name", "patient name"],
         "patientmiddleinitial": ["middle initial", "mi", "middle name", "patient middle initial"],
@@ -276,7 +393,7 @@ def normalize_and_match_fields(json_data, label_coords):
         # Signature fields
         "date": ["signature date", "today's date", "form date"],
         "signature": ["patient signature", "signature of patient", "signature"]
-    }
+    })
     
     # Create normalized versions of label_coords keys
     normalized_labels = {}

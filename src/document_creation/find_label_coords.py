@@ -1,5 +1,5 @@
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageEnhance
 import logging
 import unicodedata
 
@@ -12,6 +12,8 @@ def normalize_text(text):
         return ""
     # Convert to lowercase
     text = text.lower()
+    # Remove special characters except numbers and letters
+    text = ''.join(c for c in text if c.isalnum() or c.isspace())
     # Normalize unicode characters
     text = unicodedata.normalize('NFKD', text)
     # Remove extra spaces
@@ -34,7 +36,17 @@ def find_label_coords(img_path, field_labels):
     try:
         # Extract text and bounding box data from the image
         image = Image.open(img_path)
-        ocr_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+        
+        # Convert to grayscale for better OCR
+        image = image.convert('L')
+        
+        # Increase contrast
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(2.0)
+        
+        # Extract text with custom configuration
+        custom_config = r'--oem 3 --psm 11'
+        ocr_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, config=custom_config)
         
         # Create a normalized version of field labels for case-insensitive matching
         normalized_field_labels = [normalize_text(label) for label in field_labels]
@@ -42,18 +54,19 @@ def find_label_coords(img_path, field_labels):
         # Build a mapping of original labels to normalized labels
         label_mapping = {normalize_text(label): label for label in field_labels}
         
-        # Extract words and their bounding boxes
+        # Extract words and their bounding boxes with lower confidence threshold
         words = ocr_data['text']
         word_boxes = []
         for i in range(len(words)):
-            if int(ocr_data['conf'][i]) > 60:  # Filter by confidence level
+            if int(ocr_data['conf'][i]) > 30:  # Lower confidence threshold
                 x, y, w, h = (
                     ocr_data['left'][i],
                     ocr_data['top'][i],
                     ocr_data['width'][i],
                     ocr_data['height'][i]
                 )
-                word_boxes.append((normalize_text(words[i]), (x, y, w, h)))
+                if words[i].strip():  # Only add non-empty words
+                    word_boxes.append((normalize_text(words[i]), (x, y, w, h)))
         
         # Find matches for each field label
         label_coords = {}
@@ -63,28 +76,24 @@ def find_label_coords(img_path, field_labels):
             original_label = label_mapping[norm_label]
             found = False
             
-            # Try to find exact matches
+            # Try to find exact matches first
             for word, (x, y, w, h) in word_boxes:
                 if norm_label == word:
                     label_coords[original_label] = (x, y)
                     found = True
                     break
             
-            # If no exact match, try to find partial matches
+            # If no exact match, try partial matches
             if not found:
-                # Split the normalized label into words
                 label_words = norm_label.split()
-                
-                # Try to find sequences of words that match the label
                 for i in range(len(word_boxes) - len(label_words) + 1):
                     match = True
+                    matched_words = []
                     for j in range(len(label_words)):
-                        if label_words[j] != word_boxes[i + j][0]:
-                            match = False
-                            break
+                        if i + j < len(word_boxes):
+                            matched_words.append(word_boxes[i + j][0])
                     
-                    if match:
-                        # Get coordinates of the first word in the sequence
+                    if ' '.join(matched_words) == ' '.join(label_words):
                         x, y, _, _ = word_boxes[i][1]
                         label_coords[original_label] = (x, y)
                         found = True
@@ -101,7 +110,7 @@ def find_label_coords(img_path, field_labels):
     
     except Exception as e:
         logging.error(f"Error in find_label_coords: {e}")
-        return field_labels, {}  # Return all keys as lost if there's an error
+        return field_labels, {}
 
 def main():
     image_path = "W-2.png"
