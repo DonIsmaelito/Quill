@@ -9,7 +9,7 @@ nltk
 unstructured
 unstructured-inference
 unstructured.pytesseract
-onnx
+# onnx
 pytesseract
 pdfminer.six
 pi_heif
@@ -21,4 +21,4 @@ flax
 transformers
 huggingface_hub
 googletrans
-protobuf==3.20
+# protobuf==3.20

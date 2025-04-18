@@ -68,7 +68,7 @@ def extract_text_from_pdf_with_ocr(file_path):
     
     try:
         # Convert PDF pages to images
-        images = convert_from_path(file_path, dpi=900)
+        images = convert_from_path(file_path, dpi=300)
         logging.info(f"Converted PDF to {len(images)} images")
         
         # Process each page with OCR
