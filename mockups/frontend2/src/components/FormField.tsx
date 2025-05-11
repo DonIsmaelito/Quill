@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { Calendar as CalendarIcon, Check, X, Unlock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
 
 export type FieldType = 'text' | 'textarea' | 'select' | 'date' | 'signature';
 
@@ -16,17 +17,19 @@ export interface FieldOption {
   label: string;
 }
 
-interface FormFieldProps {
+export interface FormFieldProps {
   id: string;
   label: string;
   type: FieldType;
-  value: string | Date | null;
+  value: any;
+  onChange: (id: string, value: any) => void;
   options?: FieldOption[];
   placeholder?: string;
   autofilled?: boolean;
   autofillSource?: string;
   unfillable?: boolean;
-  onChange: (id: string, value: any) => void;
+  required?: boolean;
+  isHighlighted?: boolean;
 }
 
 const FormField: React.FC<FormFieldProps> = ({
@@ -34,12 +37,14 @@ const FormField: React.FC<FormFieldProps> = ({
   label,
   type,
   value,
-  options = [],
-  placeholder = '',
-  autofilled = false,
-  autofillSource,
-  unfillable = false,
   onChange,
+  options,
+  placeholder,
+  autofilled,
+  autofillSource,
+  unfillable,
+  required,
+  isHighlighted
 }) => {
   const [isLocked, setIsLocked] = useState(autofilled);
   
@@ -216,11 +221,72 @@ const FormField: React.FC<FormFieldProps> = ({
   };
   
   return (
-    <div className="mb-4">
-      <label htmlFor={id} className="block text-sm font-medium text-darkText mb-1">
+    <div className="space-y-2">
+      <Label htmlFor={id} className="flex items-center gap-1">
         {label}
-      </label>
-      {renderField()}
+        {required && <span className="text-red-500">*</span>}
+        {autofilled && (
+          <span className="text-xs text-green-500">
+            (Auto-filled from {autofillSource})
+          </span>
+        )}
+      </Label>
+      <div className={`relative ${isHighlighted ? 'ring-2 ring-blue-500 ring-offset-2 rounded-md transition-all duration-300' : ''}`}>
+        {type === 'text' && (
+          <Input
+            id={id}
+            value={value || ''}
+            onChange={(e) => onChange(id, e.target.value)}
+            placeholder={placeholder}
+            disabled={unfillable}
+            className={autofilled ? 'bg-green-50' : ''}
+          />
+        )}
+        {type === 'textarea' && (
+          <Textarea
+            id={id}
+            value={value || ''}
+            onChange={(e) => onChange(id, e.target.value)}
+            placeholder={placeholder}
+            disabled={unfillable}
+            className={autofilled ? 'bg-green-50' : ''}
+          />
+        )}
+        {type === 'select' && (
+          <Select
+            value={value || ''}
+            onValueChange={(value) => onChange(id, value)}
+            disabled={unfillable}
+          >
+            <SelectTrigger className={autofilled ? 'bg-green-50' : ''}>
+              <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent>
+              {options?.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {type === 'date' && (
+          <Input
+            id={id}
+            type="date"
+            value={value ? new Date(value).toISOString().split('T')[0] : ''}
+            onChange={(e) => onChange(id, e.target.value)}
+            disabled={unfillable}
+            className={autofilled ? 'bg-green-50' : ''}
+          />
+        )}
+        {type === 'signature' && (
+          <div className="border rounded-md p-4 min-h-[100px] bg-white">
+            {/* Signature pad implementation would go here */}
+            <p className="text-sm text-gray-500">Click to sign</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
