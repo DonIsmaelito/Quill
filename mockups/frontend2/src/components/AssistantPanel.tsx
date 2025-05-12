@@ -223,17 +223,99 @@ export function AssistantPanel({
         await ragService.processDocument(file);
       }
 
-      const filledFields = await ragService.fillFormFields(formFields);
-      onFileUpload(Array.from(files));
+      // Now that the user_data.json has been updated in the backend with the new file information,
+      // let's send a message on the user's behalf to fill in any fields it can in the form.
+      // Do not display this message in the UI, do not add it to the message array, and keep any text
+      // that's currently in the input box so that the user can continue typing and send another message.
 
+      // ~~~~
+      // Get current form field values using the ref for stability
+      const currentFormFields = formFields.map(field => ({
+        id: field.id,
+        label: field.label,
+        value: formValuesRef.current[field.id] || ''
+      }));
+
+      // Process message with form fields
+      const message = 'I\'ve uploaded a new document that has updated the information in your system under PATIENT INFORMATION. Try to fill out any additional fields in the form that you can that dont have a value yet (whose values in the CURRENT MEDICAL FORM FIELDS AND VALUES is MISSING). DO NOT confirm fields that are already filled out, and DO NOT ask about other fields whose data is not available in PATIENT INFORMATION. Simply give the new fields that can be filled out along with their values in the requested format.';
+      const response = await ragService.processUserMessage(message, currentFormFields);
+      // const response = "I'd be happy to help with that! Based on the patient information, I see that your billing address is listed as 4630 Hillsbury Road. Would you like me to fill in your address with this information? Here's an update: {'field_updates': [{'id': 'address', 'value': '4630 Hillsbury Road'}]} Is there anything else I can help you with?"
+      
+      console.log('Assistant response:', response);
+
+      // Extract field updates from the response
+      const fieldUpdatesMatch = response.match(/\{['"]field_updates['"]:\s*\[.*?\]\}/);
+      let updatedFields: { id: string; value: string }[] = [];
+      let displayResponse = response;
+
+      if (fieldUpdatesMatch) {
+        try {
+          const fieldUpdatesString = fieldUpdatesMatch[0].replace(/'/g, '"');
+          const updatesObj = JSON.parse(fieldUpdatesString);
+          updatedFields = updatesObj.field_updates || [];
+          console.log('Field updates:', updatedFields);
+          // Remove the field updates from the response
+          displayResponse = response.replace(fieldUpdatesMatch[0], '').trim();
+          console.log('Display response after removing fields:', displayResponse);
+        } catch (error) {
+          console.error('Error parsing field updates:', error);
+        }
+      }
+
+      // Add a message about updated fields if any were updated
+      if (updatedFields.length > 0) {
+        const fieldLabels = updatedFields.map(update => 
+          formFields.find(f => f.id === update.id)?.label || update.id
+        );
+        displayResponse += `\n\nI've updated the following fields: ${fieldLabels.join(', ')}.`;
+        console.log('New display response:', displayResponse);
+      }
+
+      // Extract mentioned fields from the response
+      const mentionedFields = formFields
+        .filter(field => displayResponse.toLowerCase().includes(field.label.toLowerCase()))
+        .map(field => field.id);
+      
+      // Notify parent component about mentioned fields
+      onFieldsMentioned?.(mentionedFields);
+
+      // Add assistant response to UI
       const assistantMessage: Message = {
-        id: Date.now().toString(),
-        content: 'I\'ve processed your documents and extracted the relevant information. The form has been updated with the information I found.',
+        id: (Date.now() + 1).toString(),
+        content: displayResponse,
         type: 'assistant',
         timestamp: new Date()
       };
-
       setMessages(prev => [...prev, assistantMessage]);
+
+      // Update form fields if any were changed
+      if (updatedFields.length > 0) {
+        // Filter out non-changes first to avoid unnecessary updates
+        const actualUpdates = updatedFields.filter(update => {
+          const field = formFields.find(f => f.id.toLowerCase() === update.id.toLowerCase());
+          // Only include if field exists and value is different from current
+          return field && formValuesRef.current[field.id] !== update.value;
+        });
+        
+        if (actualUpdates.length > 0) {
+          console.log('Actual field updates:', actualUpdates);
+          
+          // Convert to the format expected by parent component
+          const fieldUpdates = actualUpdates.map(update => ({
+            id: update.id,
+            value: update.value
+          }));
+          
+          // Notify parent about changes
+          onFieldsUpdated?.(fieldUpdates);
+        } else {
+          console.log('No actual field updates found (values already match)');
+        }
+      }
+      // ~~~~
+
+      // const filledFields = await ragService.fillFormFields(formFields);
+      onFileUpload(Array.from(files));
     } catch (error) {
       console.error('Error processing files:', error);
       toast.error('Failed to process files. Please try again.');

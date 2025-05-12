@@ -193,7 +193,7 @@ def extract_key_value_info(chunks, text, llm):
                 "1. {'patient': {'name': 'John', 'contact': {'email': 'j@example.com'}}} → {'patientName': 'John', 'patientContactEmail': 'j@example.com'}\n"
                 "2. {'medications': [{'name': 'Lisinopril', 'dosage': '10mg'}]} → {'medicationName': 'Lisinopril', 'medicationDosage': '10mg'}\n\n"
                 f"DATABASE CONTENT:\n{full_text}\n\n"
-                "OUTPUT (FLAT JSON ONLY):"
+                "OUTPUT (FLAT JSON ONLY, NO OTHER TEXT):"
             )
             
         result = llm.invoke(input=prompt)
@@ -255,13 +255,19 @@ def create_vector_db(chunks, collection_name):
     persist_dir = os.path.join(VECTOR_DB_DIR, collection_name)
     os.makedirs(persist_dir, exist_ok=True)
     
+    logging.info(f"Creating vector database in {persist_dir} with collection name {collection_name}")
+    logging.info(f"Number of chunks: {len(chunks)}")
+    logging.info(f"Chunks: {chunks}")
+    
     try:
+        logging.info("Creating vector database...")
         vector_db = Chroma.from_documents(
             documents=chunks,
             embedding=OllamaEmbeddings(model=EMBEDDING_MODEL),
             collection_name=collection_name,
             persist_directory=persist_dir,
         )
+        logging.info("Persisting vector database...")
         vector_db.persist()
         logging.info(f"Vector database created and persisted to {persist_dir}")
         return vector_db
@@ -646,10 +652,11 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "4. If unsure, offer to help find the information\n"
             "5. Always maintain patient privacy and confidentiality\n"
             "6. If asked about information not in our records, suggest relevant documents they can provide\n"
-            "7. IMPORTANT: If you can determine new values for any form fields based on the conversation and the PATIENT INFORMATION, include them in a JSON object at the end of your response with the format:\n"
+            "7. IMPORTANT: If you can determine values for ANY form fields based on the conversation and the PATIENT INFORMATION that currently have a value of MISSING, include AS MANY of them as possible in a JSON object at the end of your response with the format:\n"
             "   {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
-            "   Do NOT ask the patient to confirm this information in the chat. Just provide the new values in the JSON object at the end of the response with no reference to it.\n"
-            "   Also, the field from the PATIENT INFORMATION doesn't have to be exactly the same as the field in the form. You can use the PATIENT INFORMATION to determine the new value for the form field.\n\n"
+            "   Do NOT ask the patient to confirm this information in the chat. Just provide the new values in the JSON object at the end with its 'field_updates' key as specified.\n"
+            "   Do NOT reference this JSON object in the chat, just print it out as specified above. It will be filtered out before shown to the user.\n"
+            "   Also, the field from the PATIENT INFORMATION doesn't have to be exactly the same as the field in the form. You can use the PATIENT INFORMATION to determine the new value for the form field.\n"
             "   NEVER return any sort of JSON back to the user as evidence of your answer. ONLY return the JSON object at the end if you have new values to provide, as this will be filtered out later.\n\n"
             "QUESTION: {question}"
         ).format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question)
@@ -706,6 +713,8 @@ def main():
         if data is None:
             print(json.dumps({"error": "Failed to ingest document"}))
             return
+        else:
+            logging.info(f"Document data: {data}")
             
         chunks = split_documents(data)
         llm = ChatOllama(model=MODEL_NAME, temperature=0.3)
@@ -754,7 +763,7 @@ def main():
 
         logging.info("Loading LLM")
         # Initialize LLM and get response
-        llm = ChatOllama(model=MODEL_NAME, temperature=0.3)
+        llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
         logging.info("LLM loaded successfully")
 
         if args.document:

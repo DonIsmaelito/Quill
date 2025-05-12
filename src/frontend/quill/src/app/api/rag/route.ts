@@ -213,10 +213,14 @@ export async function POST(request: Request) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const filePath = await saveUploadedFile(buffer, file.name);
 
+      console.log('About to run ingestion script with file:', filePath);
+
       const { stdout } = await runPythonScript(
         ragScriptPath,
         ['--mode', 'ingest', '--document', filePath]
       );
+
+      console.log('Ingestion script output:', stdout);
 
       try {
         const result = JSON.parse(stdout);
@@ -241,7 +245,8 @@ export async function POST(request: Request) {
       }
       
       // Determine if this is an update request or a regular query
-      const isUpdate = isUpdateRequest(message);
+      // const isUpdate = isUpdateRequest(message);
+      const isUpdate = false; // For now, do not handle update requests, just go straight through query mechanism (for demo, later we want to use full RAG functionality and the whole quill_rag_v4 API).
       const scriptMode = isUpdate ? 'update' : 'query';
       console.log(`Message classified as ${scriptMode} request:`, message);
       

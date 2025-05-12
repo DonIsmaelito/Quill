@@ -162,7 +162,7 @@ export default function Index() {
         }
         return current;
       });
-    }, 36000);
+    }, 10000);
   };
 
   const handleFieldsUpdated = (updates: { id: string; value: string }[]) => {
@@ -179,7 +179,7 @@ export default function Index() {
     setHighlightedFields(fieldIds);
     setTimeout(() => {
       setHighlightedFields([]);
-    }, 36000);
+    }, 10000);
   };
 
   return (

@@ -155,7 +155,13 @@ class RAGService {
       
       // Add form fields and values if provided
       if (formFields) {
-        formData.append('formFields', JSON.stringify(formFields));
+        // Make a copy of the form fields and set all '' values to 'MISSING'
+        const updatedFormFields = formFields.map(field => ({
+          ...field,
+          value: field.value || 'MISSING'
+        }));
+
+        formData.append('formFields', JSON.stringify(updatedFormFields));
       }
 
       const response = await this.callApi('rag', 'POST', formData);
