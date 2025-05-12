@@ -143,6 +143,11 @@ class RAGService {
         additionalFieldContext = this.getFormFieldContext(formFieldQuestion);
       }
 
+      // If this.documents is not empty, this.loadDocuments() will be called
+      if (this.documents.length === 0) {
+        await this.loadDocuments();
+      }
+
       // Otherwise, process as a regular message
       const formData = new FormData();
       formData.append('mode', 'query');

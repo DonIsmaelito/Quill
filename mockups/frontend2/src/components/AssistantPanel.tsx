@@ -47,6 +47,7 @@ export function AssistantPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const initialLoadRef = useRef(true);
   
   // Create a ref to track form values for stable comparisons
   const formValuesRef = useRef<Record<string, any>>({});
@@ -67,6 +68,101 @@ export function AssistantPanel({
     // Set the welcome message in the ragService
     ragService.setWelcomeMessage(welcomeMessage);
   }, [formTitle, formFields]);
+
+  // Auto-fill form on initial load
+  useEffect(() => {
+    const autoFillForm = async () => {
+      if (initialLoadRef.current) {
+        initialLoadRef.current = false;
+        
+        // Small delay to ensure other effects have completed
+        setTimeout(async () => {
+          try {
+            setIsProcessing(true);
+            
+            // Get current form field values
+            const currentFormFields = formFields.map(field => ({
+              id: field.id,
+              label: field.label,
+              value: formValuesRef.current[field.id] || ''
+            }));
+            
+            // Send invisible query to fill the form
+            const message = "Can you fill out as much of my form as possible?";
+            const response = await ragService.processUserMessage(message, currentFormFields);
+            
+            console.log('Auto-fill response:', response);
+            
+            // Extract field updates from the response
+            const fieldUpdatesMatch = response.match(/\{['"]field_updates['"]:\s*\[.*?\]\}/);
+            let updatedFields: { id: string; value: string }[] = [];
+            let displayResponse = response;
+            
+            if (fieldUpdatesMatch) {
+              try {
+                const fieldUpdatesString = fieldUpdatesMatch[0].replace(/'/g, '"');
+                const updatesObj = JSON.parse(fieldUpdatesString);
+                updatedFields = updatesObj.field_updates || [];
+                console.log('Auto-fill field updates:', updatedFields);
+                
+                // Remove the field updates from the response
+                displayResponse = response.replace(fieldUpdatesMatch[0], '').trim();
+              } catch (error) {
+                console.error('Error parsing auto-fill field updates:', error);
+              }
+            }
+            
+            // Extract mentioned fields from the response
+            const mentionedFields = formFields
+              .filter(field => displayResponse.toLowerCase().includes(field.label.toLowerCase()))
+              .map(field => field.id);
+            
+            // Notify parent component about mentioned fields
+            onFieldsMentioned?.(mentionedFields);
+            
+            // Add a message about updated fields if any were updated
+            if (updatedFields.length > 0) {
+              const fieldLabels = updatedFields.map(update => 
+                formFields.find(f => f.id === update.id)?.label || update.id
+              );
+              
+              // Add assistant response to UI
+              const assistantMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                content: `I've pre-filled the following fields based on available information: ${fieldLabels.join(', ')}.`,
+                type: 'assistant',
+                timestamp: new Date()
+              };
+              setMessages(prev => [...prev, assistantMessage]);
+              
+              // Update form fields if any were changed
+              const actualUpdates = updatedFields.filter(update => {
+                const field = formFields.find(f => f.id.toLowerCase() === update.id.toLowerCase());
+                return field && formValuesRef.current[field.id] !== update.value;
+              });
+              
+              if (actualUpdates.length > 0) {
+                console.log('Actual auto-fill updates:', actualUpdates);
+                
+                const fieldUpdates = actualUpdates.map(update => ({
+                  id: update.id,
+                  value: update.value
+                }));
+                
+                onFieldsUpdated?.(fieldUpdates);
+              }
+            }
+          } catch (error) {
+            console.error('Error during auto-fill:', error);
+          } finally {
+            setIsProcessing(false);
+          }
+        }, 500);
+      }
+    };
+    
+    autoFillForm();
+  }, [formFields, onFieldsMentioned, onFieldsUpdated]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
