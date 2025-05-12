@@ -8,6 +8,50 @@ import fs from 'fs/promises';
 
 const execPromise = promisify(exec);
 
+// Add new interfaces
+interface FormFieldValue {
+  id: string;
+  label: string;
+  value: any;
+}
+
+interface UserInfo {
+  [key: string]: any;
+}
+
+// Add new file paths
+const USER_INFO_PATH = path.join('..', '..', 'uploads', 'user_info.json');
+const FORM_VALUES_PATH = path.join('..', '..', 'uploads', 'form_values.json');
+
+// Add helper functions for managing user info and form values
+async function loadUserInfo(): Promise<UserInfo> {
+  try {
+    const data = await fs.readFile(USER_INFO_PATH, 'utf-8');
+    return JSON.parse(data);
+  } catch (error: unknown) {
+    console.log('No existing user info found, starting fresh');
+    return {};
+  }
+}
+
+async function saveUserInfo(info: UserInfo): Promise<void> {
+  await fs.writeFile(USER_INFO_PATH, JSON.stringify(info, null, 2));
+}
+
+async function loadFormValues(): Promise<FormFieldValue[]> {
+  try {
+    const data = await fs.readFile(FORM_VALUES_PATH, 'utf-8');
+    return JSON.parse(data);
+  } catch (error: unknown) {
+    console.log('No existing form values found, starting fresh');
+    return [];
+  }
+}
+
+async function saveFormValues(values: FormFieldValue[]): Promise<void> {
+  await fs.writeFile(FORM_VALUES_PATH, JSON.stringify(values, null, 2));
+}
+
 async function saveUploadedFile(file: Buffer, fileName: string): Promise<string> {
   try {
     const uploadsDir = path.join('..', '..', 'uploads');
@@ -41,7 +85,7 @@ async function runPythonScript(scriptPath: string, args: string[]) {
 
   let command;
   if (isWindows) {
-    command = `conda run -n ${condaEnv} python "${scriptPath}" ${quotedArgs}`;
+    command = `python "${scriptPath}" ${quotedArgs}`;
   } else {
     command = `python3 "${scriptPath}" ${quotedArgs}`;
   }
@@ -69,6 +113,8 @@ async function runPythonScript(scriptPath: string, args: string[]) {
 function isUpdateRequest(message: string): boolean {
   // convert to lowercase for easier matching
   const lowerMessage = message.toLowerCase();
+
+  console.log('Checking if message is an update request:', lowerMessage);
   
   // keywords and phrases that suggest the user wants to update their info
   const updateKeywords = [
@@ -87,7 +133,9 @@ function isUpdateRequest(message: string): boolean {
   
   // check for direct update requests
   for (const keyword of updateKeywords) {
-    if (lowerMessage.includes(keyword)) {
+    // check for keyword with space on either side
+    if (lowerMessage.includes(` ${keyword} `)) {
+      console.log('Found update keyword:', keyword);
       for (const infoType of infoTypes) {
         if (lowerMessage.includes(infoType)) {
           return true;
@@ -107,16 +155,30 @@ function isUpdateRequest(message: string): boolean {
   
   // Check for correction patterns
   if (lowerMessage.includes('not') && lowerMessage.includes('but')) {
+    console.log('Found not/but pattern');
     return true;
   }
   
   if (lowerMessage.includes('it\'s') || lowerMessage.includes('its') || 
       lowerMessage.includes('should be') || lowerMessage.includes('is actually')) {
+        console.log('Found it\'s/its pattern');
     return true;
   }
   
   // Default to false - assume query if no update indicators found
   return false;
+}
+
+// Add CORS headers to response
+function addCorsHeaders(response: NextResponse) {
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  return response;
+}
+
+export async function OPTIONS() {
+  return addCorsHeaders(new NextResponse(null, { status: 204 }));
 }
 
 export async function POST(request: Request) {
@@ -132,18 +194,19 @@ export async function POST(request: Request) {
     try {
       await fs.access(ragScriptPath);
       console.log('RAG script found at:', ragScriptPath);
-    } catch (error) {
-      console.error('RAG script not found:', error);
-      return NextResponse.json(
-        { error: 'RAG script not found', details: error.message },
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('RAG script not found:', errorMessage);
+      return addCorsHeaders(NextResponse.json(
+        { error: 'RAG script not found', details: errorMessage },
         { status: 500 }
-      );
+      ));
     }
 
     if (mode === 'ingest') {
       const file = formData.get('file') as File;
       if (!file) {
-        return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+        return addCorsHeaders(NextResponse.json({ error: 'No file provided' }, { status: 400 }));
       }
 
       console.log('Processing file:', file.name);
@@ -157,23 +220,24 @@ export async function POST(request: Request) {
 
       try {
         const result = JSON.parse(stdout);
-        return NextResponse.json(result);
+        return addCorsHeaders(NextResponse.json(result));
       } catch {
-        return NextResponse.json({ 
+        return addCorsHeaders(NextResponse.json({ 
           message: 'Document processed successfully',
           details: stdout 
-        });
+        }));
       }
     } 
     else if (mode === 'query') {
       const message = formData.get('message') as string;
       const documentName = formData.get('documentName') as string;
       const chatHistory = formData.get('chatHistory') as string;
+      const formFields = formData.get('formFields') as string;
 
       if (!message || !documentName) {
-        return NextResponse.json({ 
+        return addCorsHeaders(NextResponse.json({ 
           error: 'Message and document name are required' 
-        }, { status: 400 });
+        }, { status: 400 }));
       }
       
       // Determine if this is an update request or a regular query
@@ -186,11 +250,6 @@ export async function POST(request: Request) {
         '--mode', scriptMode
       ];
       
-      // if (scriptMode === 'query') {
-      //   // For query mode, we need the document
-      //   args.push('--document', path.join('..', '..', 'uploads', documentName));
-      // }
-      
       // Both modes need the question/message
       args.push('--question', message);
       
@@ -201,28 +260,32 @@ export async function POST(request: Request) {
         args.push('--chat-history', tempChatHistoryPath);
       }
 
+      if (formFields) {
+        args.push('--form-fields', formFields);
+      }
+
       const { stdout } = await runPythonScript(ragScriptPath, args);
 
       try {
         const result = JSON.parse(stdout);
         if (scriptMode === 'update') {
-          return NextResponse.json({
+          return addCorsHeaders(NextResponse.json({
             content: `I've updated your information. ${result.message || ''}`,
             wasUpdate: true,
             ...result
-          });
+          }));
         } else {
-          return NextResponse.json({ content: result.response });
+          return addCorsHeaders(NextResponse.json({ content: result.response }));
         }
       } catch {
         if (scriptMode === 'update') {
-          return NextResponse.json({ 
+          return addCorsHeaders(NextResponse.json({ 
             content: 'I\'ve updated your information based on your message.',
             wasUpdate: true,
             details: stdout
-          });
+          }));
         } else {
-          return NextResponse.json({ content: stdout.trim() });
+          return addCorsHeaders(NextResponse.json({ content: stdout.trim() }));
         }
       }
     } 
@@ -284,29 +347,96 @@ export async function POST(request: Request) {
       
       try {
         const result = JSON.parse(stdout);
-        return NextResponse.json({
+        return addCorsHeaders(NextResponse.json({
           message: 'Blank form processed successfully',
           details: stdout,
           filledFormPath: outputPath
-        });
+        }));
       } catch {
-        return NextResponse.json({ 
+        return addCorsHeaders(NextResponse.json({ 
           message: 'Blank form processed successfully',
           details: stdout,
           filledFormPath: outputPath
-        });
+        }));
+      }
+    }
+    else if (mode === 'update-form-values') {
+      const values = formData.get('values') as string;
+      if (!values) {
+        return addCorsHeaders(NextResponse.json({ error: 'No form values provided' }, { status: 400 }));
+      }
+
+      try {
+        const formValues = JSON.parse(values);
+        await saveFormValues(formValues);
+        return addCorsHeaders(NextResponse.json({ 
+          message: 'Form values updated successfully',
+          values: formValues
+        }));
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return addCorsHeaders(NextResponse.json({ 
+          error: 'Invalid form values format',
+          details: errorMessage 
+        }, { status: 400 }));
+      }
+    }
+    else if (mode === 'get-form-values') {
+      try {
+        const values = await loadFormValues();
+        return addCorsHeaders(NextResponse.json({ values }));
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return addCorsHeaders(NextResponse.json({ 
+          error: 'Failed to load form values',
+          details: errorMessage 
+        }, { status: 500 }));
+      }
+    }
+    else if (mode === 'update-user-info') {
+      const info = formData.get('info') as string;
+      if (!info) {
+        return addCorsHeaders(NextResponse.json({ error: 'No user info provided' }, { status: 400 }));
+      }
+
+      try {
+        const userInfo = JSON.parse(info);
+        await saveUserInfo(userInfo);
+        return addCorsHeaders(NextResponse.json({ 
+          message: 'User info updated successfully',
+          info: userInfo
+        }));
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return addCorsHeaders(NextResponse.json({ 
+          error: 'Invalid user info format',
+          details: errorMessage 
+        }, { status: 400 }));
+      }
+    }
+    else if (mode === 'get-user-info') {
+      try {
+        const info = await loadUserInfo();
+        return addCorsHeaders(NextResponse.json({ info }));
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return addCorsHeaders(NextResponse.json({ 
+          error: 'Failed to load user info',
+          details: errorMessage 
+        }, { status: 500 }));
       }
     }
 
-    return NextResponse.json({ error: 'Invalid mode' }, { status: 400 });
-  } catch (error) {
-    console.error('Route error:', error);
-    return NextResponse.json(
+    return addCorsHeaders(NextResponse.json({ error: 'Invalid mode' }, { status: 400 }));
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Route error:', errorMessage);
+    return addCorsHeaders(NextResponse.json(
       { 
         error: 'Failed to process request',
-        details: error.message,
+        details: errorMessage,
       },
       { status: 500 }
-    );
+    ));
   }
 }

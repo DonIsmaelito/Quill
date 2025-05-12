@@ -11,7 +11,7 @@ async function runPythonScript(scriptPath: string, message: string) {
 
   let command;
   if (isWindows) {
-    command = `conda run -n ${condaEnv} python "${scriptPath}" "${message}"`;
+    command = `python "${scriptPath}" "${message}"`;
   } else {
     // On Mac/Linux, try python3 first, fall back to conda if needed
     command = `python3 "${scriptPath}" "${message}"`;

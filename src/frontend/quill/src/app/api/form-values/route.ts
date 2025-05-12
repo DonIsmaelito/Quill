@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 
-const USER_INFO_PATH = path.join(process.cwd(), '..', '..', 'uploads', 'user_info.json');
+const FORM_VALUES_PATH = path.join(process.cwd(), '..', '..', 'uploads', 'form_values.json');
 
 // Add CORS headers to response
 function addCorsHeaders(response: NextResponse) {
@@ -19,17 +19,18 @@ export async function OPTIONS() {
 export async function GET() {
   try {
     // Read the file
-    const fileContent = await fs.readFile(USER_INFO_PATH, 'utf-8');
+    const fileContent = await fs.readFile(FORM_VALUES_PATH, 'utf-8');
     
     // Parse the JSON content
-    const userInfo = JSON.parse(fileContent);
+    const formValues = JSON.parse(fileContent);
     
     // Return the data with CORS headers
-    return addCorsHeaders(NextResponse.json({ info: userInfo }));
+    return addCorsHeaders(NextResponse.json({ values: formValues }));
   } catch (error: unknown) {
-    console.error('Error reading user_info.json:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error reading form values:', errorMessage);
     return addCorsHeaders(NextResponse.json(
-      { error: 'Failed to read user info' },
+      { error: 'Failed to read form values', details: errorMessage },
       { status: 500 }
     ));
   }
@@ -38,25 +39,25 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
-    const info = formData.get('info') as string;
+    const values = formData.get('values') as string;
 
-    if (!info) {
-      return addCorsHeaders(NextResponse.json({ error: 'No user info provided' }, { status: 400 }));
+    if (!values) {
+      return addCorsHeaders(NextResponse.json({ error: 'No form values provided' }, { status: 400 }));
     }
 
-    const userInfo = JSON.parse(info);
-    await fs.writeFile(USER_INFO_PATH, JSON.stringify(userInfo, null, 2));
+    const formValues = JSON.parse(values);
+    await fs.writeFile(FORM_VALUES_PATH, JSON.stringify(formValues, null, 2));
 
     return addCorsHeaders(NextResponse.json({ 
-      message: 'User info updated successfully',
-      info: userInfo
+      message: 'Form values updated successfully',
+      values: formValues
     }));
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error updating user info:', errorMessage);
+    console.error('Error updating form values:', errorMessage);
     return addCorsHeaders(NextResponse.json({ 
-      error: 'Failed to update user info',
+      error: 'Failed to update form values',
       details: errorMessage 
     }, { status: 500 }));
   }
-}
+} 

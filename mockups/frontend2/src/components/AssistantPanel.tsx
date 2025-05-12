@@ -7,11 +7,13 @@ import { Upload, Send, Loader2 } from 'lucide-react';
 import { ragService } from '../services/ragService';
 import { toast } from 'sonner';
 
+// Not exactly the same as in Index.tsx
 interface FormField {
   id: string;
   label: string;
   type: string;
   required?: boolean;
+  value?: string;
 }
 
 interface AssistantPanelProps {
@@ -20,6 +22,7 @@ interface AssistantPanelProps {
   formTitle: string;
   formValues: Record<string, any>;
   onFieldsMentioned?: (fieldIds: string[]) => void;
+  onFieldsUpdated?: (updates: { id: string; value: string }[]) => void;
 }
 
 interface Message {
@@ -29,7 +32,14 @@ interface Message {
   timestamp: Date;
 }
 
-export function AssistantPanel({ onFileUpload, formFields, formTitle, formValues, onFieldsMentioned }: AssistantPanelProps) {
+export function AssistantPanel({ 
+  onFileUpload, 
+  formFields, 
+  formTitle, 
+  formValues, 
+  onFieldsMentioned,
+  onFieldsUpdated 
+}: AssistantPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,6 +47,14 @@ export function AssistantPanel({ onFileUpload, formFields, formTitle, formValues
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  // Create a ref to track form values for stable comparisons
+  const formValuesRef = useRef<Record<string, any>>({});
+  
+  // Keep ref in sync with props
+  useEffect(() => {
+    formValuesRef.current = formValues;
+  }, [formValues]);
 
   useEffect(() => {
     const welcomeMessage = generateWelcomeMessage(formTitle, formFields);
@@ -46,16 +64,9 @@ export function AssistantPanel({ onFileUpload, formFields, formTitle, formValues
       type: 'assistant',
       timestamp: new Date()
     }]);
+    // Set the welcome message in the ragService
+    ragService.setWelcomeMessage(welcomeMessage);
   }, [formTitle, formFields]);
-
-  useEffect(() => {
-    const formFieldValues = Object.entries(formValues).map(([id, value]) => ({
-      id,
-      label: formFields.find(field => field.id === id)?.label || id,
-      value
-    }));
-    ragService.updateFormFieldValues(formFieldValues);
-  }, [formValues, formFields]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -67,6 +78,7 @@ export function AssistantPanel({ onFileUpload, formFields, formTitle, formValues
     return `Welcome! I'm here to help you fill out the ${title}. ${suggestions}`;
   };
 
+  /* TODO: Let LLM figure out what documents are needed based on the form fields */
   const generateDocumentSuggestions = (fields: FormField[]): string => {
     const suggestions = [];
     
@@ -89,44 +101,112 @@ export function AssistantPanel({ onFileUpload, formFields, formTitle, formValues
     return `To help fill out this form, you can upload your ${suggestions.join(', ')}.`;
   };
 
-  const handleSendMessage = async () => {
-    if (!input.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: input,
-      type: 'user',
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    setIsProcessing(true);
-
+  const handleSendMessage = async (message: string) => {
+    if (!message.trim()) return;
     try {
-      const response = await ragService.processUserMessage(input);
+      // Add user message to UI
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        content: message,
+        type: 'user',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, userMessage]);
+      setInput('');
+      setIsProcessing(true);
+
+      // Get current form field values using the ref for stability
+      const currentFormFields = formFields.map(field => ({
+        id: field.id,
+        label: field.label,
+        value: formValuesRef.current[field.id] || ''
+      }));
+
+      // Process message with form fields
+      const response = await ragService.processUserMessage(message, currentFormFields);
+      // const response = "I'd be happy to help with that! Based on the patient information, I see that your billing address is listed as 4630 Hillsbury Road. Would you like me to fill in your address with this information? Here's an update: {'field_updates': [{'id': 'address', 'value': '4630 Hillsbury Road'}]} Is there anything else I can help you with?"
       
+      console.log('Assistant response:', response);
+
+      // Extract field updates from the response
+      const fieldUpdatesMatch = response.match(/\{['"]field_updates['"]:\s*\[.*?\]\}/);
+      let updatedFields: { id: string; value: string }[] = [];
+      let displayResponse = response;
+
+      if (fieldUpdatesMatch) {
+        try {
+          const fieldUpdatesString = fieldUpdatesMatch[0].replace(/'/g, '"');
+          const updatesObj = JSON.parse(fieldUpdatesString);
+          updatedFields = updatesObj.field_updates || [];
+          console.log('Field updates:', updatedFields);
+          // Remove the field updates from the response
+          displayResponse = response.replace(fieldUpdatesMatch[0], '').trim();
+          console.log('Display response after removing fields:', displayResponse);
+        } catch (error) {
+          console.error('Error parsing field updates:', error);
+        }
+      }
+
+      // Add a message about updated fields if any were updated
+      if (updatedFields.length > 0) {
+        const fieldLabels = updatedFields.map(update => 
+          formFields.find(f => f.id === update.id)?.label || update.id
+        );
+        displayResponse += `\n\nI've updated the following fields: ${fieldLabels.join(', ')}.`;
+        console.log('New display response:', displayResponse);
+      }
+
       // Extract mentioned fields from the response
       const mentionedFields = formFields
-        .filter(field => response.toLowerCase().includes(field.label.toLowerCase()))
+        .filter(field => displayResponse.toLowerCase().includes(field.label.toLowerCase()))
         .map(field => field.id);
-      
-      console.log('Mentioned fields:', mentionedFields);
       
       // Notify parent component about mentioned fields
       onFieldsMentioned?.(mentionedFields);
-      
+
+      // Add assistant response to UI
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: response,
+        content: displayResponse,
         type: 'assistant',
         timestamp: new Date()
       };
-
       setMessages(prev => [...prev, assistantMessage]);
+
+      // Update form fields if any were changed
+      if (updatedFields.length > 0) {
+        // Filter out non-changes first to avoid unnecessary updates
+        const actualUpdates = updatedFields.filter(update => {
+          const field = formFields.find(f => f.id.toLowerCase() === update.id.toLowerCase());
+          // Only include if field exists and value is different from current
+          return field && formValuesRef.current[field.id] !== update.value;
+        });
+        
+        if (actualUpdates.length > 0) {
+          console.log('Actual field updates:', actualUpdates);
+          
+          // Convert to the format expected by parent component
+          const fieldUpdates = actualUpdates.map(update => ({
+            id: update.id,
+            value: update.value
+          }));
+          
+          // Notify parent about changes
+          onFieldsUpdated?.(fieldUpdates);
+        } else {
+          console.log('No actual field updates found (values already match)');
+        }
+      }
     } catch (error) {
-      console.error('Error processing message:', error);
-      toast.error('Failed to process message. Please try again.');
+      console.error('Error sending message:', error);
+      // Add error message to UI
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        content: 'Sorry, I encountered an error while processing your message. Please try again.',
+        type: 'assistant',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsProcessing(false);
     }
@@ -212,12 +292,12 @@ export function AssistantPanel({ onFileUpload, formFields, formTitle, formValues
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message..."
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage(input)}
             disabled={isProcessing}
           />
           <Button
             size="icon"
-            onClick={handleSendMessage}
+            onClick={() => handleSendMessage(input)}
             disabled={isProcessing || !input.trim()}
           >
             {isProcessing ? (

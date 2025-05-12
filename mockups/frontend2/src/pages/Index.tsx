@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AssistantPanel } from '../components/AssistantPanel';
 import MedicalForm from '../components/MedicalForm';
 import { FieldType, FieldOption } from '../components/FormField';
@@ -92,28 +92,28 @@ export default function Index() {
       label: 'Existing Medical Conditions',
       type: 'textarea',
       placeholder: 'List any existing medical conditions',
-      unfillable: true
+      // unfillable: true
     },
     {
       id: 'allergies',
       label: 'Allergies',
       type: 'textarea',
       placeholder: 'List any allergies',
-      unfillable: true
+      // unfillable: true
     },
     {
       id: 'medications',
       label: 'Current Medications',
       type: 'textarea',
       placeholder: 'List current medications and dosages',
-      unfillable: true
+      // unfillable: true
     },
     {
       id: 'familyHistory',
       label: 'Family Medical History',
       type: 'textarea',
       placeholder: 'Describe relevant family medical history',
-      unfillable: true
+      // unfillable: true
     },
     {
       id: 'insuranceProvider',
@@ -148,15 +148,38 @@ export default function Index() {
   };
 
   const handleFormChange = (values: Record<string, any>) => {
+    console.log('Form values updated in Index:', values);
     setFormValues(values);
   };
 
   const handleFieldsMentioned = (fieldIds: string[]) => {
+    console.log('Fields mentioned:', fieldIds);
     setHighlightedFields(fieldIds);
-    // Clear the highlight after 9 seconds
+    setTimeout(() => {
+      setHighlightedFields(current => {
+        if (JSON.stringify(current.sort()) === JSON.stringify(fieldIds.sort())) {
+          return [];
+        }
+        return current;
+      });
+    }, 36000);
+  };
+
+  const handleFieldsUpdated = (updates: { id: string; value: string }[]) => {
+    console.log('Fields updated in Index:', updates);
+    setFormValues(prev => {
+      const newValues = { ...prev };
+      updates.forEach(update => {
+        newValues[update.id] = update.value;
+      });
+      return newValues;
+    });
+    
+    const fieldIds = updates.map(update => update.id);
+    setHighlightedFields(fieldIds);
     setTimeout(() => {
       setHighlightedFields([]);
-    }, 18000);
+    }, 36000);
   };
 
   return (
@@ -168,12 +191,14 @@ export default function Index() {
           formTitle="Patient Registration Form"
           formValues={formValues}
           onFieldsMentioned={handleFieldsMentioned}
+          onFieldsUpdated={handleFieldsUpdated}
         />
       </div>
       <div className="w-2/3 p-8 overflow-y-auto">
         <MedicalForm 
           uploadedFiles={uploadedFiles}
           fields={formFields}
+          formValues={formValues}
           onChange={handleFormChange}
           highlightedFields={highlightedFields}
         />

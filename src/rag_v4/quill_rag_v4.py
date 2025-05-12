@@ -137,43 +137,52 @@ def extract_key_value_info(chunks, text, llm):
     try:
         if text is not None:
             full_text = text
+            logging.info(f'Full text for extraction: {full_text}')
             prompt = (
-                "You are an expert conversation analyzer tasked with extracting user information from natural language. Examine the following conversation carefully.\n\n"
-                "TASK: Extract ALL personal/user information mentioned in this conversation as a clean JSON object with key-value pairs.\n\n"
+                "You are a medical administrative assistant helping to extract patient information from conversations. Your role is to identify and organize patient information in a clear, structured way.\n\n"
+                "TASK: Extract ALL patient information mentioned in this conversation as a clean JSON object with key-value pairs.\n\n"
                 "GUIDELINES:\n"
-                "- Identify information shared in natural language (e.g., 'My name is Ken' → {'name': 'Ken'})\n"
-                "- Look for personal details like name, age, address, phone, email, occupation, preferences, etc.\n"
-                "- Extract specific numerical values (dates, prices, ages, income amounts, etc.)\n"
+                "- Identify information shared in natural language (e.g., 'My name is John' → {'name': 'John'})\n"
+                "- Look for medical and personal details like:\n"
+                "  * Personal info: name, date of birth, contact details\n"
+                "  * Insurance info: provider, policy number, group number\n"
+                "  * Medical info: conditions, allergies, medications\n"
+                "  * Family history: relevant medical conditions\n"
                 "- Use normalized key names in camelCase format (e.g., 'phoneNumber' not 'phone_number')\n"
                 "- For complex values, combine relevant information (e.g., '123 Main St, Boston MA' → {'address': '123 Main St, Boston MA'})\n"
-                "- Only extract information actually provided by the person, not hypothetical or example text\n"
+                "- Only extract information actually provided by the patient, not hypothetical or example text\n"
                 "- Exclude pleasantries, questions, and non-informational content\n"
-                "- If the same type of information is mentioned multiple times, use the most recent or complete version\n\n"
+                "- If the same information is mentioned multiple times, use the most recent or complete version\n\n"
                 "EXAMPLES:\n"
-                "1. 'Hi there, my name is Ken and I'm 34 years old' → {'name': 'Ken', 'age': 34}\n"
-                "2. 'You can reach me at 555-123-4567 or ken@example.com' → {'phoneNumber': '555-123-4567', 'email': 'ken@example.com'}\n"
-                "3. 'I live at 123 Oak Street, Apt 4B, Chicago' → {'address': '123 Oak Street, Apt 4B, Chicago'}\n"
-                "4. 'I make about $75,000 per year and was born on March 15, 1989' → {'income': '$75,000', 'dateOfBirth': 'March 15, 1989'}\n\n"
+                "1. 'Hi, I'm John Smith and I'm 45 years old' → {'name': 'John Smith', 'age': 45}\n"
+                "2. 'My insurance is Blue Cross, policy number 123-456-789' → {'insuranceProvider': 'Blue Cross', 'insurancePolicyNumber': '123-456-789'}\n"
+                "3. 'I have allergies to penicillin and seasonal allergies' → {'allergies': ['penicillin', 'seasonal']}\n"
+                "4. 'I take 10mg of Lisinopril daily for blood pressure' → {'medications': [{'name': 'Lisinopril', 'dosage': '10mg', 'frequency': 'daily', 'purpose': 'blood pressure'}]}\n\n"
+                "IMPORTANT: Do NOT include any data from these examples. Only extract information from the CONVERSATION TEXT."
                 f"CONVERSATION TEXT:\n{full_text}\n\n"
                 "OUTPUT (JSON only):"
             )
         else:
+            logging.info("Extracting key-value pairs from document chunks")
             if not chunks:
                 logging.warning("No chunks provided for extraction")
                 return {}
                 
             full_text = " ".join([chunk.page_content for chunk in chunks])
+            logging.info(f'Full text for extraction: {full_text}')
             prompt = (
-                "You are an expert data extraction specialist working with vector database content. Analyze the following data carefully.\n\n"
-                "TASK: Extract ALL relevant information into a FLAT (non-nested) JSON object with simple key-value pairs.\n\n"
+                "You are a medical administrative assistant processing patient documents. Your task is to extract and organize patient information into a structured format.\n\n"
+                "TASK: Extract ALL relevant patient information into a FLAT (non-nested) JSON object with simple key-value pairs.\n\n"
                 "GUIDELINES:\n"
                 "- Create a SINGLE-LEVEL JSON only - NO nested objects or arrays\n"
-                "- For structured or hierarchical data, flatten using dot notation or combined keys:\n"
+                "- For structured or hierarchical data, flatten using combined keys:\n"
                 "  INSTEAD OF: {'address': {'street': '123 Main', 'city': 'Austin'}} \n"
                 "  USE: {'addressStreet': '123 Main', 'addressCity': 'Austin'}\n"
-                "- Extract all personal data (name, contact, identification numbers, credentials)\n"
-                "- Extract all financial information (account numbers, balances, transactions)\n"
-                "- Extract all dates, times, locations, measurements, and quantities\n"
+                "- Extract all patient information:\n"
+                "  * Personal details (name, DOB, contact info)\n"
+                "  * Insurance information (provider, policy numbers)\n"
+                "  * Medical information (conditions, allergies, medications)\n"
+                "  * Family medical history\n"
                 "- Standardize all key names to camelCase format\n"
                 "- Ensure keys are specific and self-explanatory (e.g., 'primaryPhoneNumber' vs 'phone')\n"
                 "- Preserve the original values exactly as they appear - don't normalize values\n"
@@ -181,14 +190,16 @@ def extract_key_value_info(chunks, text, llm):
                 "- EXCLUDE empty fields, placeholder text, or fields without clear values\n"
                 "- If identical information appears multiple times, use the most recent or complete version\n\n"
                 "EXAMPLES OF PROPER FLATTENING:\n"
-                "1. {'user': {'name': 'John', 'contact': {'email': 'j@example.com'}}} → {'userName': 'John', 'userContactEmail': 'j@example.com'}\n"
-                "2. {'payment': [{'date': '2023-04-01', 'amount': '$500'}]} → {'paymentDate': '2023-04-01', 'paymentAmount': '$500'}\n\n"
+                "1. {'patient': {'name': 'John', 'contact': {'email': 'j@example.com'}}} → {'patientName': 'John', 'patientContactEmail': 'j@example.com'}\n"
+                "2. {'medications': [{'name': 'Lisinopril', 'dosage': '10mg'}]} → {'medicationName': 'Lisinopril', 'medicationDosage': '10mg'}\n\n"
                 f"DATABASE CONTENT:\n{full_text}\n\n"
                 "OUTPUT (FLAT JSON ONLY):"
             )
             
         result = llm.invoke(input=prompt)
         raw_output = result.content.strip()
+        
+        logging.info(f"Raw output from LLM: {raw_output}")
         
         # Robust JSON extraction
         json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
@@ -333,29 +344,31 @@ def create_chain(new_form, llm, user_info="", uploaded=None):
         uploaded = []
         
     template = (
-        "You are Quill, an expert form-filling assistant. Your task is to generate a FLAT JSON object where keys EXACTLY match the form field names and values are accurately derived from stored user information.\n\n"
+        "You are a friendly and helpful medical administrative assistant at a clinic. Your role is to help patients understand and complete their medical forms.\n\n"
         "FORM TO COMPLETE:\n{new_form_context}\n\n"
-        "USER PROFILE DATA:\n{user_info}\n\n"
+        "PATIENT INFORMATION:\n{user_info}\n\n"
         "INSTRUCTIONS:\n"
-        "1. FIELD EXTRACTION:\n"
-        "   - Extract ALL field names from the form using their EXACT naming (preserve case, spacing, and special characters)\n"
-        "   - Include all fields in your JSON output, even if some values are missing\n"
-        "   - NO NESTED JSON STRUCTURES - output must be a single-level, flat JSON object\n"
-        "   - If form has fields that appear hierarchical (e.g., 'address.street'), maintain them as flat keys\n\n"
+        "1. FIELD EXPLANATION:\n"
+        "   - Explain each field in clear, patient-friendly language\n"
+        "   - Use simple terms to explain medical concepts\n"
+        "   - Suggest relevant documents where information can be found\n"
+        "   - Explain why each piece of information is needed\n\n"
         "2. VALUE DETERMINATION:\n"
-        "   - For each field, find the most relevant information from user profile data\n"
-        "   - If information is unavailable, set value to '' (don't guess or omit the field)\n\n"
+        "   - For each field, find the most relevant information from patient data\n"
+        "   - If information is unavailable, explain what's needed and why\n"
+        "   - Suggest where to find missing information\n\n"
         "3. DATA FORMATTING:\n"
-        "   - Dates: Match exactly the format specified in the form (MM/DD/YYYY, YYYY-MM-DD, etc.)\n"
-        "   - Addresses: Format as single strings with appropriate separators as required by the form\n"
-        "   - Phone numbers: Apply correct formatting with appropriate separators\n"
-        "   - Financial values: Preserve exact decimal places and currency formatting\n"
-        "   - Boolean values: Use true/false unless form specifies other values\n\n"
-        "4. OUTPUT REQUIREMENTS:\n"
-        "   - Generate valid, properly formatted FLAT JSON with no nested objects or arrays\n"
-        "   - Ensure all field names in your output EXACTLY match those in the form\n"
-        "   - Do not include any explanatory text before or after the JSON object\n"
-        "   - Verify the JSON has no nested structures and is properly formatted\n\n"
+        "   - Dates: Use MM/DD/YYYY format unless specified otherwise\n"
+        "   - Addresses: Format as single strings with appropriate separators\n"
+        "   - Phone numbers: Use (XXX) XXX-XXXX format\n"
+        "   - Medical values: Use standard medical terminology\n"
+        "   - Boolean values: Use Yes/No unless form specifies other values\n\n"
+        "4. RESPONSE GUIDELINES:\n"
+        "   - Be warm and professional\n"
+        "   - Explain medical terms in simple language\n"
+        "   - Keep responses concise but informative\n"
+        "   - If unsure, offer to help find the information\n"
+        "   - Always maintain patient privacy and confidentiality\n\n"
         "QUESTION: {question}\n\n"
         "ANSWER (FLAT JSON ONLY):"
     )
@@ -571,7 +584,7 @@ def update_user_info_from_conversation(text, llm, current_info: dict):
     
     return merged
 
-def answer_query(llm, question, user_info="", chat_history="", new_form=None):
+def answer_query(llm, question, user_info="", chat_history="", new_form=None, form_fields=None):
     """
     Answer a query using stored data and vector DBs of uploaded forms.
     """
@@ -579,49 +592,70 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None):
         user_info_dict = json.loads(user_info) if isinstance(user_info, str) else user_info
     except Exception as e:
         logging.error(f"Error parsing user_info: {e}")
-        return "Sorry, I couldn't process your request due to an error with user information."
+        return "I apologize, but I'm having trouble accessing your information. Please let me know how I can help you with the form."
+    
+    logging.info(f"Question: {question}")
+    logging.info(f"User info: {user_info}")
+    logging.info(f"Chat history: {chat_history}")
+    logging.info(f"New form: {new_form}")
+    logging.info(f"Form fields: {form_fields}")
     
     if new_form:
         new_form_context = "\n".join(doc.page_content for doc in new_form)
     
-        # If we have vector DBs, use the more sophisticated approach
         template = (
-            "You are Quill, an expert form-filling assistant. Your task is to generate a FLAT JSON object where keys EXACTLY match the form field names and values are accurately derived from stored user information.\n\n"
+            "You are a friendly and helpful medical administrative assistant at a clinic. Your role is to help patients understand and complete their medical forms.\n\n"
             "FORM TO COMPLETE:\n{new_form_context}\n\n"
-            "USER PROFILE DATA:\n{user_info}\n\n"
-            "CHAT HISTORY:\n{chat_history}\n\n "
+            "PATIENT INFORMATION:\n{user_info}\n\n"
+            "CHAT HISTORY:\n{chat_history}\n\n"
             "INSTRUCTIONS:\n"
-            "1. FIELD EXTRACTION:\n"
-            "   - Extract ALL field names from the form using their EXACT naming (preserve case, spacing, and special characters)\n"
-            "   - Include all fields in your JSON output, even if some values are missing\n"
-            "   - NO NESTED JSON STRUCTURES - output must be a one-level, flat JSON object\n"
-            "   - If form has fields that appear hierarchical (e.g., 'address.street'), maintain them as flat keys\n\n"
+            "1. FIELD EXPLANATION:\n"
+            "   - Explain each field in clear, patient-friendly language\n"
+            "   - Use simple terms to explain medical concepts\n"
+            "   - Suggest relevant documents where information can be found\n"
+            "   - Explain why each piece of information is needed\n\n"
             "2. VALUE DETERMINATION:\n"
-            "   - For each field, find the most relevant information from user profile data\n"
-            "   - If information is unavailable, set value to '' (don't guess or omit the field)\n\n"
+            "   - For each field, find the most relevant information from patient data\n"
+            "   - If information is unavailable, explain what's needed and why\n"
+            "   - Suggest where to find missing information\n\n"
             "3. DATA FORMATTING:\n"
-            "   - Dates: Match exactly the format specified in the form (MM/DD/YYYY, YYYY-MM-DD, etc.)\n"
-            "   - Addresses: Format as single strings with appropriate separators as required by the form\n"
-            "   - Phone numbers: Apply correct formatting with appropriate separators\n"
-            "   - Financial values: Preserve exact decimal places and currency formatting\n"
-            "   - Boolean values: Use true/false unless form specifies other values\n\n"
-            "4. OUTPUT REQUIREMENTS:\n"
-            "   - Generate valid, properly formatted FLAT JSON with no nested objects or arrays\n"
-            "   - Ensure all field names in your output EXACTLY match those in the form\n"
-            "   - Do not include any explanatory text before or after the JSON object\n"
-            "   - Verify the JSON has no nested structures and is properly formatted\n\n"
+            "   - Dates: Use MM/DD/YYYY format unless specified otherwise\n"
+            "   - Addresses: Format as single strings with appropriate separators\n"
+            "   - Phone numbers: Use (XXX) XXX-XXXX format\n"
+            "   - Medical values: Use standard medical terminology\n"
+            "   - Boolean values: Use Yes/No unless form specifies other values\n\n"
+            "4. RESPONSE GUIDELINES:\n"
+            "   - Be warm and professional\n"
+            "   - Explain medical terms in simple language\n"
+            "   - Keep responses concise but informative\n"
+            "   - If unsure, offer to help find the information\n"
+            "   - Always maintain patient privacy and confidentiality\n\n"
             "QUESTION: {question}\n\n"
             "ANSWER (DO NOT USE ANY NESTED STRUCTURE IN JSON. USE ONLY FLAT, ONE-LEVEL JSON. ANSWER ONLY JSON, NOTHING ELSE):"
         )
-        
-        prompt_text = template.format(
-            new_form_context=new_form_context,
-            user_info=json.dumps(user_info_dict, indent=2),
-            chat_history=chat_history,
-            question=question
-        )
     else:
-        prompt_text = "You are an expert conversational assistant. Your task is to ONLY answer questions based on stored user information otherwise request the user to upload other documents they have with relevant information (but don't name them explicitly). Do not respond with more than 1-2 sentences. \n\n" + question
+        prompt_text = (
+            "You are a friendly and helpful medical administrative assistant at a clinic. Your role is to help patients understand and complete their medical forms.\n\n"
+            "PATIENT INFORMATION:\n{user_info}\n\n"
+            "CHAT HISTORY:\n{chat_history}\n\n"
+            "CURRENT MEDICAL FORM FIELDS AND VALUES:\n{form_fields}\n\n"
+            "GUIDELINES:\n"
+            "1. Be warm and professional\n"
+            "2. Explain medical terms in simple language\n"
+            "3. Keep responses concise but informative\n"
+            "4. If unsure, offer to help find the information\n"
+            "5. Always maintain patient privacy and confidentiality\n"
+            "6. If asked about information not in our records, suggest relevant documents they can provide\n"
+            "7. IMPORTANT: If you can determine new values for any form fields based on the conversation and the PATIENT INFORMATION, include them in a JSON object at the end of your response with the format:\n"
+            "   {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
+            "   Do NOT ask the patient to confirm this information in the chat. Just provide the new values in the JSON object at the end of the response with no reference to it.\n"
+            "   Also, the field from the PATIENT INFORMATION doesn't have to be exactly the same as the field in the form. You can use the PATIENT INFORMATION to determine the new value for the form field.\n\n"
+            "   NEVER return any sort of JSON back to the user as evidence of your answer. ONLY return the JSON object at the end if you have new values to provide, as this will be filtered out later.\n\n"
+            "QUESTION: {question}"
+        ).format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question)
+    
+    
+    logging.info(f"Prompt text: {prompt_text}")
     
     response = llm.invoke(input=prompt_text)
     return response.content.strip()
@@ -652,7 +686,15 @@ def main():
         help="Path to chat history JSON file for query mode"
     )
     
+    parser.add_argument(
+        "--form-fields",
+        type=str,
+        help="Stringified JSON of form fields to be used in the query mode"
+    )
+    
     args = parser.parse_args()
+    
+    # print('Document:', args.document)
     
     if args.mode == "ingest":
         if not args.document:
@@ -700,22 +742,26 @@ def main():
             print(json.dumps({"error": "Question is required for query mode"}))
             return
         
+        logging.info("Loading user info")
         # Load stored user info
         user_info = load_user_info()
+        logging.info(f"User info loaded: {user_info}")
 
         # Get chat history if provided
         chat_history = ""
         if args.chat_history:
             chat_history = format_chat_history(args.chat_history)
 
+        logging.info("Loading LLM")
         # Initialize LLM and get response
         llm = ChatOllama(model=MODEL_NAME, temperature=0.3)
+        logging.info("LLM loaded successfully")
 
         if args.document:
             data = ingest_file(args.document)
-            response = answer_query(llm, args.question, user_info, chat_history, data)
+            response = answer_query(llm, args.question, user_info=user_info, chat_history=chat_history, new_form=data, form_fields=args.form_fields)
         else:
-            response = answer_query(llm, args.question, user_info, chat_history)
+            response = answer_query(llm, args.question, user_info=user_info, chat_history=chat_history, form_fields=args.form_fields)
         
         print(json.dumps({"response": response}))
     

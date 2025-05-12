@@ -1,273 +1,314 @@
-import { OllamaEmbeddings } from '@langchain/community/embeddings/ollama';
-import { ChatOllama } from '@langchain/community/chat_models/ollama';
-import { Chroma } from '@langchain/community/vectorstores/chroma';
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { Document } from '@langchain/core/documents';
 import { OLLAMA_CONFIG } from '../config/ollama';
 
-interface FormField {
-  id: string;
-  label: string;
-  type: string;
-  required?: boolean;
-}
+// API base URL - this should point to your quill server
+const API_BASE_URL = 'http://localhost:3000/api';
 
-interface FormFieldValue {
-  id: string;
-  label: string;
-  value: any;
-}
-
-interface UserInfo {
-  [key: string]: any;
-}
-
-interface Message {
-  role: 'user' | 'assistant';
+export interface Message {
+  type: 'user' | 'bot';
   content: string;
-  timestamp: Date;
+}
+
+export interface Document {
+  id: number;
+  name: string;
+  type: string;
+}
+
+export interface FormFieldValue {
+  id: string;
+  label: string;
+  value: string;
 }
 
 class RAGService {
-  private llm: ChatOllama;
-  private embeddings: OllamaEmbeddings;
-  private vectorDb: Chroma | null = null;
-  private userInfo: UserInfo = {};
-  private formFieldValues: FormFieldValue[] = [];
   private conversationHistory: Message[] = [];
+  private documents: Document[] = [];
+  private formFieldValues: FormFieldValue[] = [];
 
   constructor() {
-    this.llm = new ChatOllama({
-      baseUrl: OLLAMA_CONFIG.baseUrl,
-      model: OLLAMA_CONFIG.models.llm,
-      temperature: OLLAMA_CONFIG.temperature,
-    });
-    this.embeddings = new OllamaEmbeddings({
-      baseUrl: OLLAMA_CONFIG.baseUrl,
-      model: OLLAMA_CONFIG.models.embeddings,
-    });
+    this.loadDocuments();
+    this.loadFormFieldValues();
   }
 
-  updateFormFieldValues(values: FormFieldValue[]): void {
-    this.formFieldValues = values;
-  }
-
-  private async verifyOllamaConnection(): Promise<boolean> {
-    try {
-      const response = await fetch(`${OLLAMA_CONFIG.baseUrl}/api/tags`);
-      if (!response.ok) {
-        throw new Error(`Ollama server returned ${response.status}`);
-      }
-      const data = await response.json();
-      const models = data.models || [];
-      const hasModel = models.some((m: any) => m.name === OLLAMA_CONFIG.models.llm);
-      if (!hasModel) {
-        console.error(`Model ${OLLAMA_CONFIG.models.llm} not found. Available models:`, models.map((m: any) => m.name));
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error('Failed to connect to Ollama server:', error);
-      return false;
+  setWelcomeMessage(welcomeMessage: string) {
+    // Only set welcome message if conversation history is empty
+    if (this.conversationHistory.length === 0) {
+      this.conversationHistory.push({
+        type: 'bot',
+        content: welcomeMessage
+      });
     }
   }
 
-  async processDocument(file: File): Promise<void> {
+  private async loadDocuments() {
     try {
-      if (!await this.verifyOllamaConnection()) {
-        throw new Error('Ollama server is not available or model is not found');
+      const response = await fetch(`${API_BASE_URL}/documents`);
+      if (response.ok) {
+        const data = await response.json();
+        this.documents = data;
       }
-
-      // Convert file to text (simplified for now - would need proper file handling)
-      const text = await this.readFileAsText(file);
-      
-      // Split text into chunks
-      const splitter = new RecursiveCharacterTextSplitter({
-        chunkSize: OLLAMA_CONFIG.chunkSize,
-        chunkOverlap: OLLAMA_CONFIG.chunkOverlap,
-      });
-      const chunks = await splitter.createDocuments([text]);
-
-      // Create or update vector store
-      if (!this.vectorDb) {
-        this.vectorDb = await Chroma.fromDocuments(chunks, this.embeddings, {
-          collectionName: 'user_documents',
-          url: 'http://localhost:8000'
-        });
-      } else {
-        await this.vectorDb.addDocuments(chunks);
-      }
-
-      // Extract information from document
-      const extractedInfo = await this.extractInformation(text);
-      this.updateUserInfo(extractedInfo);
-
-      // Add document processing to conversation history
-      this.conversationHistory.push({
-        role: 'assistant',
-        content: 'I\'ve processed your document and extracted the relevant information.',
-        timestamp: new Date()
-      });
     } catch (error) {
-      console.error('Error processing document:', error);
+      console.error('Error loading documents:', error);
+    }
+  }
+
+  private async loadFormFieldValues() {
+    try {
+      const formData = new FormData();
+      formData.append('mode', 'get-form-values');
+      const response = await this.callApi('rag', 'POST', formData);
+      // Only update if we got valid form values back
+      if (response.formValues && Array.isArray(response.formValues)) {
+        this.formFieldValues = response.formValues;
+      } else {
+        this.formFieldValues = [];
+      }
+    } catch (error) {
+      // If there's an error (like no form values), just initialize with empty array
+      console.log('No form values found, initializing with empty array');
+      this.formFieldValues = [];
+    }
+  }
+
+  private async callApi(endpoint: string, method: string, formData: FormData) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+        method,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'API call failed');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error in ${endpoint} API call:`, error);
       throw error;
     }
   }
 
-  async processUserMessage(message: string): Promise<string> {
+  async processDocument(file: File): Promise<{ message: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mode', 'ingest');
+
+    const response = await this.callApi('rag', 'POST', formData);
+    
+    // Add document to local list
+    this.documents.push({
+      id: Date.now(),
+      name: file.name,
+      type: this.determineDocumentType(file.name)
+    });
+
+    return { message: response.message };
+  }
+
+  private determineDocumentType(fileName: string): string {
+    const lowercaseName = fileName.toLowerCase();
+    if (lowercaseName.includes('w2') || lowercaseName.includes('tax')) {
+      return 'Tax Document';
+    } else if (lowercaseName.includes('lease')) {
+      return 'Housing';
+    } else if (lowercaseName.includes('medical')) {
+      return 'Healthcare';
+    }
+    return 'Other';
+  }
+
+  async generateResponse(message: string, options: { documents: Document[], chatHistory: Message[] }): Promise<string> {
     try {
-      if (!await this.verifyOllamaConnection()) {
-        throw new Error('Ollama server is not available or model is not found');
+      const formData = new FormData();
+      formData.append('mode', 'query');
+      formData.append('message', message);
+      formData.append('documentName', options.documents[0]?.name || '');
+      formData.append('chatHistory', JSON.stringify(options.chatHistory));
+
+      const response = await this.callApi('rag', 'POST', formData);
+      return response.content;
+    } catch (error) {
+      console.error('Error generating response:', error);
+      throw error;
+    }
+  }
+
+  async processUserMessage(message: string, formFields?: FormFieldValue[]): Promise<string> {
+    try {
+      // First, check if this is a question about form fields
+      const formFieldQuestion = this.isFormFieldQuestion(message);
+      let additionalFieldContext = '';
+      if (formFieldQuestion) {
+        additionalFieldContext = this.getFormFieldContext(formFieldQuestion);
       }
 
-      // Add user message to history
-      this.conversationHistory.push({
-        role: 'user',
-        content: message,
-        timestamp: new Date()
-      });
+      // Otherwise, process as a regular message
+      const formData = new FormData();
+      formData.append('mode', 'query');
+      formData.append('message', message);
+      formData.append('documentName', this.documents[0]?.name || '');
+      formData.append('chatHistory', JSON.stringify(this.conversationHistory));
+      if (additionalFieldContext) {
+        formData.append('additionalFieldContext', additionalFieldContext);
+      }
+      
+      // Add form fields and values if provided
+      if (formFields) {
+        formData.append('formFields', JSON.stringify(formFields));
+      }
 
-      const prompt = this.createPrompt(message);
-      const response = await this.llm.invoke(prompt);
-      const responseContent = response.content.toString();
-
-      // Add assistant response to history
-      this.conversationHistory.push({
-        role: 'assistant',
-        content: responseContent,
-        timestamp: new Date()
-      });
-
+      const response = await this.callApi('rag', 'POST', formData);
+      
+      // Extract the content from the response
+      const responseContent = typeof response === 'string' ? response : response.content;
+      
+      // Update conversation history
+      this.conversationHistory.push(
+        { type: 'user', content: message },
+        { type: 'bot', content: responseContent }
+      );
+      
       return responseContent;
     } catch (error) {
       console.error('Error processing message:', error);
-      if (error instanceof Error) {
-        throw new Error(`Failed to process message: ${error.message}`);
-      }
       throw error;
     }
   }
 
-  async fillFormFields(formFields: FormField[]): Promise<Record<string, any>> {
+  private isFormFieldQuestion(message: string): { fieldId: string; question: string } | null {
+    const lowerMessage = message.toLowerCase();
+    
+    // Check for questions about specific fields
+    for (const field of this.formFieldValues) {
+      const fieldName = field.label.toLowerCase();
+      if (lowerMessage.includes(fieldName) || lowerMessage.includes(field.id.toLowerCase())) {
+        return {
+          fieldId: field.id,
+          question: message
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  // TODO: Implement later and allow for multiple fields that are referenced, providing context for each one.
+  private getFormFieldContext(fieldQuestion: { fieldId: string; question: string }): string {
+//     const field = this.formFieldValues.find(f => f.id === fieldQuestion.fieldId);
+//     if (!field) return "I'm not sure which field you're asking about. Could you please specify?";
+
+//     const fieldInfo = this.getFieldInformation(field);
+//     return `I'd be happy to explain the "${field.label}" field to you. ${fieldInfo.explanation}
+
+// ${fieldInfo.documentSuggestions}
+
+// ${fieldInfo.additionalInfo}`;
+    const additionalContext = '';
+    return additionalContext;
+  }
+
+  private getFieldInformation(field: FormFieldValue): { 
+    explanation: string; 
+    documentSuggestions: string; 
+    additionalInfo: string;
+  } {
+    // Common medical form field explanations
+    const fieldExplanations: Record<string, { 
+      explanation: string; 
+      documents: string[]; 
+      additionalInfo: string;
+    }> = {
+      'fullName': {
+        explanation: 'This field is for your complete legal name as it appears on your government-issued ID.',
+        documents: ['Driver\'s license', 'State ID', 'Passport', 'Birth certificate'],
+        additionalInfo: 'Please make sure to include your full name, including any middle names or suffixes.'
+      },
+      'dateOfBirth': {
+        explanation: 'This field requires your complete date of birth in MM/DD/YYYY format.',
+        documents: ['Driver\'s license', 'State ID', 'Passport', 'Birth certificate'],
+        additionalInfo: 'This information helps us verify your identity and ensure proper medical care.'
+      },
+      'insuranceProvider': {
+        explanation: 'This field is for the name of your health insurance company.',
+        documents: ['Insurance card', 'Insurance policy documents'],
+        additionalInfo: 'If you have multiple insurance plans, please provide your primary insurance information.'
+      },
+      'insurancePolicyNumber': {
+        explanation: 'This is your unique insurance policy or member ID number.',
+        documents: ['Insurance card'],
+        additionalInfo: 'You can find this number on your insurance card, usually labeled as "Policy Number" or "Member ID".'
+      },
+      'medicalConditions': {
+        explanation: 'This field is for any current medical conditions or diagnoses you have.',
+        documents: ['Previous medical records', 'Doctor\'s notes', 'Hospital discharge papers'],
+        additionalInfo: 'Please include any conditions that are currently being treated or monitored.'
+      },
+      'allergies': {
+        explanation: 'This field is for any allergies you have, including medications, foods, or environmental allergies.',
+        documents: ['Previous medical records', 'Allergy test results'],
+        additionalInfo: 'Please include both the allergen and your reaction to it.'
+      },
+      'medications': {
+        explanation: 'This field is for any medications you are currently taking.',
+        documents: ['Prescription bottles', 'Pharmacy records', 'Medication list from your doctor'],
+        additionalInfo: 'Please include the medication name, dosage, and how often you take it.'
+      }
+    };
+
+    const defaultResponse = {
+      explanation: 'This field is required for your medical records.',
+      documents: ['Any relevant medical documents', 'Identification documents'],
+      additionalInfo: 'If you\'re unsure about what information to provide, please let me know and I\'ll help you figure it out.'
+    };
+
+    const fieldInfo = fieldExplanations[field.id] || defaultResponse;
+    
+    return {
+      explanation: fieldInfo.explanation,
+      documentSuggestions: `You can find this information in your ${fieldInfo.documents.join(', ')}.`,
+      additionalInfo: fieldInfo.additionalInfo
+    };
+  }
+
+  async fillFormFields(file: File): Promise<{ filledFormPath: string }> {
+    const formData = new FormData();
+    formData.append('mode', 'blank');
+    formData.append('file', file);
+
+    const response = await this.callApi('rag', 'POST', formData);
+    return { filledFormPath: response.filledFormPath };
+  }
+
+  async updateFormFieldValues(values: FormFieldValue[]): Promise<void> {
     try {
-      if (!await this.verifyOllamaConnection()) {
-        throw new Error('Ollama server is not available or model is not found');
+      const formData = new FormData();
+      formData.append('mode', 'update-form-values');
+      formData.append('values', JSON.stringify(values));
+
+      // if there are no values, just return
+      if (values.length === 0) {
+        return;
       }
 
-      const prompt = this.createFormFillingPrompt(formFields);
-      const response = await this.llm.invoke(prompt);
-      
-      // Parse the response as JSON
-      const filledFields = JSON.parse(response.content.toString());
-      return filledFields;
+      await this.callApi('rag', 'POST', formData);
+      this.formFieldValues = values;
     } catch (error) {
-      console.error('Error filling form fields:', error);
+      console.error('Error updating form field values:', error);
       throw error;
     }
   }
 
-  private async readFileAsText(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string);
-      reader.onerror = (e) => reject(e);
-      reader.readAsText(file);
-    });
+  getFormFieldValues(): FormFieldValue[] {
+    return this.formFieldValues;
   }
 
-  private async extractInformation(text: string): Promise<UserInfo> {
-    const prompt = `
-      You are an expert at extracting information from documents.
-      Extract all relevant personal information from the following text and return it as a JSON object.
-      Only include information that is explicitly stated in the text.
-      
-      Text:
-      ${text}
-      
-      Return a JSON object with the following structure:
-      {
-        "name": "full name if found",
-        "dateOfBirth": "date of birth if found",
-        "sex": "sex if found",
-        "address": "full address if found",
-        "phone": "phone number if found",
-        "email": "email if found",
-        "insuranceProvider": "insurance provider if found",
-        "insuranceNumber": "insurance number if found",
-        "medicalConditions": "medical conditions if found",
-        "allergies": "allergies if found",
-        "medications": "medications if found"
-      }
-    `;
-
-    const response = await this.llm.invoke(prompt);
-    return JSON.parse(response.content.toString());
+  getDocuments(): Document[] {
+    return this.documents;
   }
 
-  private updateUserInfo(newInfo: UserInfo): void {
-    this.userInfo = { ...this.userInfo, ...newInfo };
-  }
-
-  private createPrompt(message: string): string {
-    // Create a user-friendly version of form field values
-    const userFriendlyValues = this.formFieldValues.map(field => ({
-      field: field.label,
-      value: field.value
-    }));
-
-    // Format conversation history
-    const formattedHistory = this.conversationHistory
-      .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
-      .join('\n');
-
-    return `
-      You are a helpful medical form assistant. Use the following context to answer the user's question.
-      
-      Current User Information:
-      ${JSON.stringify(this.userInfo, null, 2)}
-      
-      Current Form Field Values:
-      ${JSON.stringify(userFriendlyValues, null, 2)}
-      
-      Conversation History:
-      ${formattedHistory}
-      
-      User Question: ${message}
-      
-      Provide a helpful, accurate response based on the available information.
-      If you don't have enough information to answer a question, say so and suggest what additional information would be helpful.
-      If the user asks about specific form fields, use the current form field values to provide accurate information.
-      IMPORTANT: When referring to form fields, always use their labels (e.g., "Full Name", "Date of Birth") and never use their internal IDs.
-      For example, say "Your Full Name is John Doe" instead of "Your patientName is John Doe".
-    `;
-  }
-
-  private createFormFillingPrompt(formFields: FormField[]): string {
-    // Create a user-friendly version of form fields
-    const userFriendlyFields = formFields.map(field => ({
-      field: field.label,
-      required: field.required
-    }));
-
-    return `
-      You are an expert at filling out medical forms. Use the following information to fill out the form fields.
-      
-      Current User Information:
-      ${JSON.stringify(this.userInfo, null, 2)}
-      
-      Current Form Field Values:
-      ${JSON.stringify(this.formFieldValues.map(f => ({ field: f.label, value: f.value })), null, 2)}
-      
-      Form Fields:
-      ${JSON.stringify(userFriendlyFields, null, 2)}
-      
-      Fill out the form fields with the available information. Return a JSON object where:
-      - Keys are the exact field IDs from the form
-      - Values are the corresponding information from the user data
-      - If information is not available, use an empty string
-      - Format dates as YYYY-MM-DD
-      - Format phone numbers as (XXX) XXX-XXXX
-    `;
+  addDocument(document: Document) {
+    this.documents.push(document);
   }
 }
 

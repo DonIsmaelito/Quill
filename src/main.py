@@ -8,6 +8,7 @@ def start_frontend():
     # Get frontend directory path
     current_dir = os.getcwd()
     frontend_path = os.path.join(current_dir, 'src', 'frontend', 'quill')
+    frontend_path = os.path.join(current_dir, 'mockups', 'frontend2')
     
     try:
         # Change to the frontend directory

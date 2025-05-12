@@ -40,7 +40,7 @@ async function runPythonScript(scriptPath: string, args: string[]) {
 
   let command;
   if (isWindows) {
-    command = `conda run -n ${condaEnv} python "${scriptPath}" ${quotedArgs}`;
+    command = `python "${scriptPath}" ${quotedArgs}`;
   } else {
     command = `python3 "${scriptPath}" ${quotedArgs}`;
   }

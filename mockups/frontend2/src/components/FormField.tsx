@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { Calendar as CalendarIcon, Check, X, Unlock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
+import SignatureCanvas from 'react-signature-canvas';
 
 export type FieldType = 'text' | 'textarea' | 'select' | 'date' | 'signature';
 
@@ -38,140 +39,64 @@ const FormField: React.FC<FormFieldProps> = ({
   type,
   value,
   onChange,
-  options,
+  options = [],
   placeholder,
   autofilled,
   autofillSource,
   unfillable,
   required,
-  isHighlighted
+  isHighlighted = false
 }) => {
+  // Track the last valid prop value to prevent flickering
+  const lastValidValueRef = useRef<any>(value);
+  const [internalValue, setInternalValue] = useState<any>(value);
+  const signatureRef = useRef<SignatureCanvas | null>(null);
   const [isLocked, setIsLocked] = useState(autofilled);
+  
+  // Add more robust debugging in the useEffect for value changes
+  useEffect(() => {
+    console.log(`FormField ${id} value prop changed:`, value);
+    console.log(`FormField ${id} current internalValue:`, internalValue);
+    
+    // Don't use strict equality which might fail for objects/dates
+    if (value !== undefined && JSON.stringify(value) !== JSON.stringify(internalValue)) {
+      console.log(`Updating internalValue for ${id} to:`, value);
+      setInternalValue(value);
+      lastValidValueRef.current = value;
+    }
+  }, [value, id]);
+
+  // Update lock state when autofilled prop changes
+  useEffect(() => {
+    setIsLocked(autofilled);
+  }, [autofilled]);
+
+  // Improved change handler to reduce state updates
+  const handleChange = (fieldValue: any) => {
+    // Only update if the value has actually changed
+    if (fieldValue !== internalValue) {
+      setInternalValue(fieldValue);
+      lastValidValueRef.current = fieldValue;
+      onChange(id, fieldValue);
+    }
+  };
+
+  const handleSignatureEnd = () => {
+    if (signatureRef.current) {
+      const signatureDataURL = signatureRef.current.toDataURL();
+      handleChange(signatureDataURL);
+    }
+  };
+
+  const clearSignature = () => {
+    if (signatureRef.current) {
+      signatureRef.current.clear();
+      handleChange('');
+    }
+  };
   
   const handleUnlock = () => {
     setIsLocked(false);
-  };
-  
-  const renderField = () => {
-    const isDisabled = isLocked && autofilled;
-    
-    switch (type) {
-      case 'text':
-        return (
-          <div className="relative">
-            <Input
-              id={id}
-              value={value as string || ''}
-              onChange={(e) => onChange(id, e.target.value)}
-              placeholder={placeholder}
-              disabled={isDisabled}
-              className={cn(
-                autofilled ? "autofilled pr-10" : "",
-                unfillable ? "unfillable" : "",
-              )}
-            />
-            {renderStatus()}
-          </div>
-        );
-        
-      case 'textarea':
-        return (
-          <div className="relative">
-            <Textarea
-              id={id}
-              value={value as string || ''}
-              onChange={(e) => onChange(id, e.target.value)}
-              placeholder={placeholder}
-              disabled={isDisabled}
-              className={cn(
-                autofilled ? "autofilled pr-10" : "",
-                unfillable ? "unfillable" : "",
-              )}
-            />
-            {renderStatus()}
-          </div>
-        );
-        
-      case 'select':
-        return (
-          <div className="relative">
-            <Select
-              disabled={isDisabled}
-              value={value as string}
-              onValueChange={(val) => onChange(id, val)}
-            >
-              <SelectTrigger 
-                className={cn(
-                  autofilled ? "autofilled pr-10" : "",
-                  unfillable ? "unfillable" : "",
-                )}
-              >
-                <SelectValue placeholder={placeholder} />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {renderStatus()}
-          </div>
-        );
-        
-      case 'date':
-        return (
-          <div className="relative">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  disabled={isDisabled}
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !value && "text-muted-foreground",
-                    autofilled ? "autofilled pr-10" : "",
-                    unfillable ? "unfillable" : "",
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {value ? format(value as Date, 'MM/dd/yyyy') : <span>Pick a date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 z-50 pointer-events-auto" align="start">
-                <Calendar
-                  mode="single"
-                  selected={value as Date || undefined}
-                  onSelect={(date) => onChange(id, date)}
-                  initialFocus
-                  className="p-3 pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
-            {renderStatus()}
-          </div>
-        );
-        
-      case 'signature':
-        return (
-          <div className="relative border border-gray-300 h-32 bg-white rounded flex items-center justify-center">
-            {value ? (
-              <div className="text-center">
-                <p className="text-sm italic">{String(value)}</p>
-                <p className="text-xs text-gray-500">E-signature</p>
-              </div>
-            ) : (
-              <Button onClick={() => onChange(id, "John Doe")}>
-                Add Signature
-              </Button>
-            )}
-          </div>
-        );
-        
-      default:
-        return null;
-    }
   };
   
   const renderStatus = () => {
@@ -219,50 +144,64 @@ const FormField: React.FC<FormFieldProps> = ({
     
     return null;
   };
-  
+
+  const isDisabled = isLocked && autofilled;
+  const fieldClassName = cn(
+    autofilled ? "bg-green-50 pr-10" : "",
+    unfillable ? "unfillable" : "",
+  );
+
+  // Also ensure we're using the key prop correctly
+  // Add a unique key that changes when the value changes to force re-render
+  const fieldKey = `${id}-${isHighlighted ? 'highlighted' : 'normal'}`;
+
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id} className="flex items-center gap-1">
+    <div className={`space-y-2 transition-all ${isHighlighted ? 'bg-yellow-50 p-4 rounded-lg shadow-sm' : ''}`}>
+      <Label htmlFor={id} className="flex items-center gap-1 font-medium">
         {label}
         {required && <span className="text-red-500">*</span>}
-        {autofilled && (
-          <span className="text-xs text-green-500">
-            (Auto-filled from {autofillSource})
-          </span>
-        )}
       </Label>
-      <div className={`relative ${isHighlighted ? 'ring-2 ring-blue-500 ring-offset-2 rounded-md transition-all duration-300' : ''}`}>
+
+      <div className="relative">
         {type === 'text' && (
           <Input
             id={id}
-            value={value || ''}
-            onChange={(e) => onChange(id, e.target.value)}
             placeholder={placeholder}
-            disabled={unfillable}
-            className={autofilled ? 'bg-green-50' : ''}
+            value={internalValue || ''}
+            onChange={(e) => handleChange(e.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+            key={fieldKey}
           />
         )}
+
         {type === 'textarea' && (
           <Textarea
             id={id}
-            value={value || ''}
-            onChange={(e) => onChange(id, e.target.value)}
             placeholder={placeholder}
-            disabled={unfillable}
-            className={autofilled ? 'bg-green-50' : ''}
+            value={internalValue || ''}
+            onChange={(e) => handleChange(e.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+            rows={4}
+            key={fieldKey}
           />
         )}
+
         {type === 'select' && (
-          <Select
-            value={value || ''}
-            onValueChange={(value) => onChange(id, value)}
-            disabled={unfillable}
+          <Select 
+            value={internalValue || ''} 
+            onValueChange={handleChange}
+            disabled={isDisabled}
           >
-            <SelectTrigger className={autofilled ? 'bg-green-50' : ''}>
-              <SelectValue placeholder={placeholder} />
+            <SelectTrigger 
+              className={fieldClassName}
+              key={fieldKey}
+            >
+              <SelectValue placeholder={placeholder || "Select an option"} />
             </SelectTrigger>
             <SelectContent>
-              {options?.map((option) => (
+              {options.map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -270,22 +209,66 @@ const FormField: React.FC<FormFieldProps> = ({
             </SelectContent>
           </Select>
         )}
+
         {type === 'date' && (
-          <Input
-            id={id}
-            type="date"
-            value={value ? new Date(value).toISOString().split('T')[0] : ''}
-            onChange={(e) => onChange(id, e.target.value)}
-            disabled={unfillable}
-            className={autofilled ? 'bg-green-50' : ''}
-          />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                disabled={isDisabled}
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !internalValue && "text-muted-foreground",
+                  fieldClassName
+                )}
+                key={fieldKey}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {internalValue ? format(new Date(internalValue), 'MM/dd/yyyy') : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 z-50 pointer-events-auto" align="start">
+              <Calendar
+                mode="single"
+                selected={internalValue ? new Date(internalValue) : undefined}
+                onSelect={(date) => handleChange(date)}
+                initialFocus
+                className="p-3 pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
         )}
+
         {type === 'signature' && (
-          <div className="border rounded-md p-4 min-h-[100px] bg-white">
-            {/* Signature pad implementation would go here */}
-            <p className="text-sm text-gray-500">Click to sign</p>
+          <div className="border border-gray-300 rounded p-2">
+            <div className="border border-dashed border-gray-300 rounded bg-gray-50 h-32 flex flex-col">
+              {internalValue ? (
+                <div className="text-center h-full flex items-center justify-center">
+                  <img src={internalValue} alt="Signature" className="max-h-full" />
+                </div>
+              ) : (
+                <SignatureCanvas
+                  ref={signatureRef}
+                  canvasProps={{
+                    className: 'signature-canvas w-full h-full',
+                  }}
+                  onEnd={handleSignatureEnd}
+                />
+              )}
+            </div>
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={clearSignature}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Clear Signature
+              </button>
+            </div>
           </div>
         )}
+        
+        {renderStatus()}
       </div>
     </div>
   );
