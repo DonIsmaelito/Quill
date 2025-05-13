@@ -89,8 +89,8 @@ export default function Index() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <div className="w-1/3 border-r border-gray-200 bg-white shadow-sm">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="w-1/3 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
         <AssistantPanel 
           onFileUpload={handleFileUpload}
           formFields={formFields}
@@ -101,7 +101,7 @@ export default function Index() {
           isFormFieldsLoading={isFormFieldsLoading}
         />
       </div>
-      <div className="w-2/3 overflow-y-auto bg-gray-50">
+      <div className="w-2/3 overflow-y-auto bg-gray-50 dark:bg-gray-950">
         <div className="max-w-5xl mx-auto px-8 py-6">
           <MedicalForm 
             uploadedFiles={uploadedFiles}

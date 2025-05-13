@@ -6,6 +6,7 @@ import { Card } from './ui/card';
 import { Upload, Send, Loader2 } from 'lucide-react';
 import { ragService } from '../services/ragService';
 import { toast } from 'sonner';
+import { ThemeToggle } from './ThemeToggle';
 
 // Not exactly the same as in Index.tsx
 interface FormField {
@@ -431,8 +432,9 @@ export function AssistantPanel({
 
   return (
     <Card className="flex flex-col h-full">
-      <div className="p-4 border-b">
+      <div className="p-4 border-b flex justify-between items-center">
         <h2 className="text-lg font-semibold">Assistant</h2>
+        <ThemeToggle />
       </div>
       
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
