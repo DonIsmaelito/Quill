@@ -31,6 +31,7 @@ export interface FormFieldProps {
   unfillable?: boolean;
   required?: boolean;
   isHighlighted?: boolean;
+  'data-highlighted'?: boolean;
 }
 
 const FormField: React.FC<FormFieldProps> = ({
@@ -147,8 +148,10 @@ const FormField: React.FC<FormFieldProps> = ({
 
   const isDisabled = isLocked && autofilled;
   const fieldClassName = cn(
+    "w-full transition-all duration-200",
     autofilled ? "bg-green-50 pr-10" : "",
     unfillable ? "unfillable" : "",
+    isHighlighted ? "ring-2 ring-blue-500 ring-offset-2" : ""
   );
 
   // Also ensure we're using the key prop correctly
@@ -156,8 +159,8 @@ const FormField: React.FC<FormFieldProps> = ({
   const fieldKey = `${id}-${isHighlighted ? 'highlighted' : 'normal'}`;
 
   return (
-    <div className={`space-y-2 transition-all ${isHighlighted ? 'bg-yellow-50 p-4 rounded-lg shadow-sm' : ''}`}>
-      <Label htmlFor={id} className="flex items-center gap-1 font-medium">
+    <div className="space-y-2">
+      <Label htmlFor={id} className="flex items-center gap-1 text-base font-medium text-gray-700">
         {label}
         {required && <span className="text-red-500">*</span>}
       </Label>
@@ -169,9 +172,10 @@ const FormField: React.FC<FormFieldProps> = ({
             placeholder={placeholder}
             value={internalValue || ''}
             onChange={(e) => handleChange(e.target.value)}
-            className={fieldClassName}
+            className={cn(fieldClassName, "h-11 text-base")}
             disabled={isDisabled}
             key={fieldKey}
+            data-highlighted={isHighlighted}
           />
         )}
 
@@ -181,10 +185,11 @@ const FormField: React.FC<FormFieldProps> = ({
             placeholder={placeholder}
             value={internalValue || ''}
             onChange={(e) => handleChange(e.target.value)}
-            className={fieldClassName}
+            className={cn(fieldClassName, "min-h-[100px] text-base")}
             disabled={isDisabled}
             rows={4}
             key={fieldKey}
+            data-highlighted={isHighlighted}
           />
         )}
 
@@ -195,14 +200,15 @@ const FormField: React.FC<FormFieldProps> = ({
             disabled={isDisabled}
           >
             <SelectTrigger 
-              className={fieldClassName}
+              className={cn(fieldClassName, "h-11 text-base")}
               key={fieldKey}
+              data-highlighted={isHighlighted}
             >
               <SelectValue placeholder={placeholder || "Select an option"} />
             </SelectTrigger>
             <SelectContent>
               {options.map(option => (
-                <SelectItem key={option.value} value={option.value}>
+                <SelectItem key={option.value} value={option.value} className="text-base">
                   {option.label}
                 </SelectItem>
               ))}
@@ -217,13 +223,13 @@ const FormField: React.FC<FormFieldProps> = ({
                 variant="outline"
                 disabled={isDisabled}
                 className={cn(
-                  "w-full justify-start text-left font-normal",
+                  "w-full justify-start text-left font-normal h-11 text-base",
                   !internalValue && "text-muted-foreground",
                   fieldClassName
                 )}
                 key={fieldKey}
               >
-                <CalendarIcon className="mr-2 h-4 w-4" />
+                <CalendarIcon className="mr-2 h-5 w-5" />
                 {internalValue ? format(new Date(internalValue), 'MM/dd/yyyy') : <span>Pick a date</span>}
               </Button>
             </PopoverTrigger>
@@ -240,8 +246,8 @@ const FormField: React.FC<FormFieldProps> = ({
         )}
 
         {type === 'signature' && (
-          <div className="border border-gray-300 rounded p-2">
-            <div className="border border-dashed border-gray-300 rounded bg-gray-50 h-32 flex flex-col">
+          <div className="border border-gray-200 rounded-md p-2">
+            <div className="border border-dashed border-gray-300 rounded-md bg-gray-50 h-32 flex flex-col">
               {internalValue ? (
                 <div className="text-center h-full flex items-center justify-center">
                   <img src={internalValue} alt="Signature" className="max-h-full" />
@@ -260,7 +266,7 @@ const FormField: React.FC<FormFieldProps> = ({
               <button
                 type="button"
                 onClick={clearSignature}
-                className="text-sm text-gray-500 hover:text-gray-700"
+                className="text-base text-gray-500 hover:text-gray-700"
               >
                 Clear Signature
               </button>

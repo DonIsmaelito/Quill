@@ -45,6 +45,22 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
 }) => {
   const { toast } = useToast();
   const [reviewOpen, setReviewOpen] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // Add effect to scroll to first highlighted field
+  useEffect(() => {
+    if (highlightedFields.length > 0 && formRef.current) {
+      // Find the first highlighted field element
+      const firstHighlightedField = formRef.current.querySelector('[data-highlighted="true"]');
+      if (firstHighlightedField) {
+        // Scroll the field into view with smooth behavior and some offset from the top
+        firstHighlightedField.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'center'
+        });
+      }
+    }
+  }, [highlightedFields]);
 
   // Remove local formData state since we're using props
   const handleFieldChange = (id: string, value: any) => {
@@ -96,10 +112,13 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   }));
 
   return (
-    <Card className="p-6 bg-white shadow-sm max-w-6xl mx-auto my-8">
-      <h2 className="text-2xl font-bold mb-6 text-darkText">New Patient Registration</h2>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <Card className="bg-white shadow-sm">
+      <div className="px-8 py-6 border-b border-gray-100">
+        <h2 className="text-3xl font-semibold text-gray-900">New Patient Registration</h2>
+        <p className="mt-2 text-base text-gray-500">Please fill out all required fields marked with an asterisk (*)</p>
+      </div>
+      <form onSubmit={handleSubmit} className="p-8">
+        <div ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {fields.map(field => (
             <FormField
               key={field.id}
@@ -115,15 +134,16 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
               required={field.required}
               onChange={handleFieldChange}
               isHighlighted={highlightedFields.includes(field.id)}
+              data-highlighted={highlightedFields.includes(field.id)}
             />
           ))}
         </div>
-        <div className="flex justify-between mt-8">
+        <div className="flex justify-between mt-10 pt-6 border-t border-gray-100">
           <Button
             type="button"
             variant="outline"
             onClick={handleReview}
-            className="border-primary text-primary"
+            className="border-gray-300 text-gray-700 hover:bg-gray-50"
           >
             Review Registration
           </Button>

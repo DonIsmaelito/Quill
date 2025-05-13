@@ -168,7 +168,8 @@ export async function POST(request: Request) {
       
       // Determine if this is an update request or a regular query
       const isUpdate = isUpdateRequest(message);
-      const endpoint = isUpdate ? 'update' : 'query';
+      // const endpoint = isUpdate ? 'update' : 'query';
+      const endpoint = 'query'; // Always use 'query' for now until we update (TODO)
       console.log(`Message classified as ${endpoint} request:`, message);
       
       // Set up the API form data

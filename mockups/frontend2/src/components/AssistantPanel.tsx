@@ -94,7 +94,7 @@ export function AssistantPanel({
             console.log('Auto-fill response:', response);
             
             // Extract field updates from the response
-            const fieldUpdatesMatch = response.match(/\{['"]field_updates['"]:\s*\[.*?\]\}/);
+            const fieldUpdatesMatch = response.match(/\{['"]field_updates['"]\s*:\s*\[(\n?.*?)+\]\}/);
             let updatedFields: { id: string; value: string }[] = [];
             let displayResponse = response;
             
@@ -220,7 +220,9 @@ export function AssistantPanel({
 
       // Process message with form fields
       const response = await ragService.processUserMessage(message, currentFormFields);
-      // const response = "I'd be happy to help with that! Based on the patient information, I see that your billing address is listed as 4630 Hillsbury Road. Would you like me to fill in your address with this information? Here's an update: {'field_updates': [{'id': 'address', 'value': '4630 Hillsbury Road'}]} Is there anything else I can help you with?"
+      // // delay for 2 seconds to simulate processing
+      // await new Promise(resolve => setTimeout(resolve, 2000));
+      // const response = "I'd be happy to help with that! Here are common examples of medical conditions you might include as selectable or fillable items in a medical form: high blood pressure, diabetes, asthma, allergies, heart disease, etc. Let me know if you'd like more information on any of these conditions!";
       
       console.log('Assistant response:', response);
 
@@ -309,6 +311,7 @@ export function AssistantPanel({
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('File upload triggered');
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
@@ -335,7 +338,9 @@ export function AssistantPanel({
       // Process message with form fields
       const message = 'I\'ve uploaded a new document that has updated the information in your system under PATIENT INFORMATION. Try to fill out any additional fields in the form that you can that dont have a value yet (whose values in the CURRENT MEDICAL FORM FIELDS AND VALUES is MISSING). DO NOT confirm fields that are already filled out, and DO NOT ask about other fields whose data is not available in PATIENT INFORMATION. Simply give the new fields that can be filled out along with their values in the requested format.';
       const response = await ragService.processUserMessage(message, currentFormFields);
-      // const response = "I'd be happy to help with that! Based on the patient information, I see that your billing address is listed as 4630 Hillsbury Road. Would you like me to fill in your address with this information? Here's an update: {'field_updates': [{'id': 'address', 'value': '4630 Hillsbury Road'}]} Is there anything else I can help you with?"
+      // // delay for 2 seconds to simulate processing
+      // await new Promise(resolve => setTimeout(resolve, 2000));
+      // const response = "Welcome back! I'm happy to help you fill out your medical form. Now that we have some updated information from the document you uploaded, let's see if we can fill out a few more fields. Based on the PATIENT INFORMATION, I was able to determine some new values for the following fields: {'field_updates': [{'id': 'patientName', 'value': 'Johnathan Doe'}, {'id': 'dateOfBirth', 'value': '01/15/1985'}, {'id': 'gender', 'value': 'Male'}, {'id': 'phone', 'value': '(555) 123-4567'}, {'id': 'email', 'value': 'john.doe@example.com'}, {'id': 'address', 'value': '123 Main Street, Springfield, TX'}, {'id': 'insuranceProvider', 'value': 'Blue Cross Blue Shield'}, {'id': 'insuranceNumber', 'value': 'BCBS123456789'}]}";
       
       console.log('Assistant response:', response);
 
@@ -463,8 +468,9 @@ export function AssistantPanel({
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={isProcessing}
+            className="h-11 w-11"
           >
-            <Upload className="h-4 w-4" />
+            <Upload className="h-5 w-5" />
           </Button>
           <Input
             value={input}
@@ -472,16 +478,18 @@ export function AssistantPanel({
             placeholder="Type your message..."
             onKeyPress={(e) => e.key === 'Enter' && handleSendMessage(input)}
             disabled={isProcessing}
+            className="h-11 text-[15px]"
           />
           <Button
             size="icon"
             onClick={() => handleSendMessage(input)}
             disabled={isProcessing || !input.trim()}
+            className="h-11 w-11"
           >
             {isProcessing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              <Send className="h-4 w-4" />
+              <Send className="h-5 w-5" />
             )}
           </Button>
         </div>

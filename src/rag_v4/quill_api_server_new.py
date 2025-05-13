@@ -21,6 +21,17 @@ from pydantic import BaseModel
 import uvicorn
 from typing import Optional, Dict, List, Any
 import base64
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+
+OPENAI_MODEL_NAME = "gpt-4.1-nano"
+OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY environment variable not set. Please set it to your OpenAI API key.")
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 Image.MAX_IMAGE_PIXELS = None  # Disable image size limit
 
@@ -234,8 +245,24 @@ def extract_key_value_info(chunks, text, llm):
                 "OUTPUT (FLAT JSON ONLY, NO OTHER TEXT):"
             )
             
-        result = llm.invoke(input=prompt)
-        raw_output = result.content.strip()
+        # result = llm.invoke(input=prompt)
+        # raw_output = result.content.strip()
+        
+        logging.info(f"Prompt text: {prompt}")
+        
+        response = openai_client.chat.completions.create(
+            model=OPENAI_MODEL_NAME,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            n=1,
+            stop=None
+        )
+        
+        logging.info(f"OpenAI response: {response}")
+        
+        raw_output = response.choices[0].message.content.strip()
         
         logging.info(f"Raw output from LLM: {raw_output}")
         
@@ -443,21 +470,42 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "6. If asked about information not in our records, suggest relevant documents they can provide\n"
             "7. IMPORTANT: If you can determine values for ANY form fields based on the conversation and the PATIENT INFORMATION that currently have a value of MISSING, include AS MANY of them as possible in a well-formed JSON object at the end of your response with the format:\n"
             "   {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
+            "   For example:\n"
+            "   Based on the information I have, I was able to fill out some of the form for you!"
+            "   {{'field_updates': [{{'id': 'patientName', 'value': 'John Markovich'}}, {{'id': 'email', 'value': 'jm23@gmail.com'}}]}}\n"
             "   ONLY provide field_updates for fields that are in the CURRENT MEDICAL FORM FIELDS AND VALUES and have a value of MISSING. Use the associated IDs. Only choose from the IDs in the existing form fields, not the patient info ones.\n"
             "   Only update field values if you have the actual new value. Don't use place-holders.\n"
             "   Do NOT ask the patient to confirm this information in the chat. Just provide the new values in the JSON object at the end with its 'field_updates' key as specified.\n"
             "   Do NOT reference this JSON object in the chat, just print it out as specified above. It will be filtered out before shown to the user.\n"
             "   Also, the field from the PATIENT INFORMATION doesn't have to be exactly the same as the field in the form. You can use the PATIENT INFORMATION to determine the new value for the form field.\n"
             "   NEVER return any sort of JSON back to the user as evidence of your answer. ONLY return the JSON object at the end if you have new values to provide, as this will be filtered out later.\n\n"
-            "QUESTION: {question}"
+            "QUESTION: {question}\n\n"
+            "Remember to provide the answer in this format all in one line: {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
         ).format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question)
     
     
     logging.info(f"Prompt text: {prompt_text}")
     
-    response = llm.invoke(input=prompt_text)
-    logging.info(f"LLM response: {response.content.strip()}")
-    return response.content.strip()
+    logging.info('Using OpenAI model for completion')
+    # Use the OpenAI API to get the response. Edit later to handle conversation history properly.
+    response = openai_client.chat.completions.create(
+        model=OPENAI_MODEL_NAME,
+        messages=[
+            {"role": "user", "content": prompt_text}
+        ],
+        temperature=0.1,
+        max_tokens=1500,
+        n=1,
+        stop=None
+    )
+    
+    logging.info(f"OpenAI response: {response}")
+    
+    response = response.choices[0].message.content.strip()
+    
+    # response = llm.invoke(input=prompt_text)
+    logging.info(f"LLM response: {response}")
+    return response
 
 def merge_user_info(current_info: dict, new_info: dict, llm) -> dict:
     """Merge new_info into current_info using LLM-generated mapping."""
@@ -666,8 +714,8 @@ async def ingest_document(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Failed to ingest document")
             
         chunks = split_documents(data)
-        llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
-        key_value_info = extract_key_value_info(chunks, None, llm)
+        # llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
+        key_value_info = extract_key_value_info(chunks, None, None)
         
         # Flatten any nested structures before saving
         flat_key_value_info = flatten_json(key_value_info)
@@ -714,7 +762,7 @@ async def query_endpoint(
             chat_history_formatted = format_chat_history(chatHistory)
         
         # Initialize LLM
-        llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
+        # llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
         
         if documentName:
             # If document is provided, load it
@@ -727,7 +775,7 @@ async def query_endpoint(
                 raise HTTPException(status_code=400, detail=f"Failed to load document: {documentName}")
                 
             response = answer_query(
-                llm, 
+                None, 
                 message, 
                 user_info=user_info, 
                 chat_history=chat_history_formatted,
@@ -737,7 +785,7 @@ async def query_endpoint(
         else:
             # Answer without document
             response = answer_query(
-                llm, 
+                None, 
                 message, 
                 user_info=user_info, 
                 chat_history=chat_history_formatted,
@@ -766,6 +814,8 @@ async def update_endpoint(
         if documentName:
             # Update via document
             file_path = os.path.join(UPLOADS_DIR, documentName)
+            logging.info(f"Processing document for update: {file_path}")
+            logging.info(f"Cwd absolute path: {os.path.abspath(os.getcwd())}")
             updated_info = update_user_info_from_doc(file_path, llm, current_info)
             return {
                 "status": "success",

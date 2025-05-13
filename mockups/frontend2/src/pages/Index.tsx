@@ -45,10 +45,10 @@ export default function Index() {
       label: 'Sex', 
       type: 'select',
       options: [
-        { value: 'male', label: 'Male' },
-        { value: 'female', label: 'Female' },
-        { value: 'other', label: 'Other' },
-        { value: 'prefer-not-to-say', label: 'Prefer not to say' }
+        { value: 'Male', label: 'Male' },
+        { value: 'Female', label: 'Female' },
+        { value: 'Other', label: 'Other' },
+        { value: 'Prefer-not-to-say', label: 'Prefer not to say' }
       ],
       required: true
     },
@@ -183,8 +183,8 @@ export default function Index() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <div className="w-1/3 border-r border-gray-200 bg-white">
+    <div className="flex h-screen bg-gray-50">
+      <div className="w-1/3 border-r border-gray-200 bg-white shadow-sm">
         <AssistantPanel 
           onFileUpload={handleFileUpload}
           formFields={formFields}
@@ -194,14 +194,16 @@ export default function Index() {
           onFieldsUpdated={handleFieldsUpdated}
         />
       </div>
-      <div className="w-2/3 p-8 overflow-y-auto">
-        <MedicalForm 
-          uploadedFiles={uploadedFiles}
-          fields={formFields}
-          formValues={formValues}
-          onChange={handleFormChange}
-          highlightedFields={highlightedFields}
-        />
+      <div className="w-2/3 overflow-y-auto bg-gray-50">
+        <div className="max-w-5xl mx-auto px-8 py-6">
+          <MedicalForm 
+            uploadedFiles={uploadedFiles}
+            fields={formFields}
+            formValues={formValues}
+            onChange={handleFormChange}
+            highlightedFields={highlightedFields}
+          />
+        </div>
       </div>
     </div>
   );

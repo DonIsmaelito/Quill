@@ -152,7 +152,7 @@ class RAGService {
       const formData = new FormData();
       formData.append('mode', 'query');
       formData.append('message', message);
-      formData.append('documentName', this.documents[0]?.name || '');
+      // formData.append('documentName', this.documents[0]?.name || '');
       formData.append('chatHistory', JSON.stringify(this.conversationHistory));
       if (additionalFieldContext) {
         formData.append('additionalFieldContext', additionalFieldContext);
