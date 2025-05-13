@@ -23,6 +23,7 @@ interface AssistantPanelProps {
   formValues: Record<string, any>;
   onFieldsMentioned?: (fieldIds: string[]) => void;
   onFieldsUpdated?: (updates: { id: string; value: string }[]) => void;
+  isFormFieldsLoading: boolean;
 }
 
 interface Message {
@@ -38,7 +39,8 @@ export function AssistantPanel({
   formTitle, 
   formValues, 
   onFieldsMentioned,
-  onFieldsUpdated 
+  onFieldsUpdated,
+  isFormFieldsLoading
 }: AssistantPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -72,7 +74,7 @@ export function AssistantPanel({
   // Auto-fill form on initial load
   useEffect(() => {
     const autoFillForm = async () => {
-      if (initialLoadRef.current) {
+      if (initialLoadRef.current && !isFormFieldsLoading && formFields.length > 0) {
         initialLoadRef.current = false;
         
         // Small delay to ensure other effects have completed
@@ -86,6 +88,8 @@ export function AssistantPanel({
               label: field.label,
               value: formValuesRef.current[field.id] || ''
             }));
+
+            console.log('Current form fields:', currentFormFields);
             
             // Send invisible query to fill the form
             const message = "Can you fill out as much of my form as possible?";
@@ -162,7 +166,7 @@ export function AssistantPanel({
     };
     
     autoFillForm();
-  }, [formFields, onFieldsMentioned, onFieldsUpdated]);
+  }, [formFields, onFieldsMentioned, onFieldsUpdated, isFormFieldsLoading]);
 
   // Scroll to bottom when messages change
   useEffect(() => {

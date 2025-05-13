@@ -76,25 +76,25 @@
             "id": "medicalConditions",
             "label": "Existing Medical Conditions",
             "type": "textarea",
-            "placeholder": "List any existing medical conditions",
+            "placeholder": "List any existing medical conditions"
         },
         {
             "id": "allergies",
             "label": "Allergies",
             "type": "textarea",
-            "placeholder": "List any allergies",
+            "placeholder": "List any allergies"
         },
         {
             "id": "medications",
             "label": "Current Medications",
             "type": "textarea",
-            "placeholder": "List current medications and dosages",
+            "placeholder": "List current medications and dosages"
         },
         {
             "id": "familyHistory",
             "label": "Family Medical History",
             "type": "textarea",
-            "placeholder": "Describe relevant family medical history",
+            "placeholder": "Describe relevant family medical history"
         },
         {
             "id": "insuranceProvider",

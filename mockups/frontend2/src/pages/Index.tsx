@@ -26,116 +26,22 @@ export default function Index() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [highlightedFields, setHighlightedFields] = useState<string[]>([]);
-  const [formFields] = useState<FormField[]>([
-    { 
-      id: 'patientName', 
-      label: 'Full Name', 
-      type: 'text',
-      placeholder: 'Enter your full name',
-      required: true
-    },
-    { 
-      id: 'dateOfBirth', 
-      label: 'Date of Birth', 
-      type: 'date',
-      required: true
-    },
-    { 
-      id: 'sex', 
-      label: 'Sex', 
-      type: 'select',
-      options: [
-        { value: 'Male', label: 'Male' },
-        { value: 'Female', label: 'Female' },
-        { value: 'Other', label: 'Other' },
-        { value: 'Prefer-not-to-say', label: 'Prefer not to say' }
-      ],
-      required: true
-    },
-    {
-      id: 'email',
-      label: 'Email Address',
-      type: 'text',
-      placeholder: 'Enter your email address',
-      required: true
-    },
-    {
-      id: 'phone',
-      label: 'Phone Number',
-      type: 'text',
-      placeholder: 'Enter your phone number',
-      required: true
-    },
-    {
-      id: 'address',
-      label: 'Address',
-      type: 'textarea',
-      placeholder: 'Enter your full address',
-      required: true
-    },
-    {
-      id: 'emergencyContact',
-      label: 'Emergency Contact Name',
-      type: 'text',
-      placeholder: 'Enter emergency contact name',
-      required: true
-    },
-    {
-      id: 'emergencyPhone',
-      label: 'Emergency Contact Phone',
-      type: 'text',
-      placeholder: 'Enter emergency contact phone number',
-      required: true
-    },
-    {
-      id: 'medicalConditions',
-      label: 'Existing Medical Conditions',
-      type: 'textarea',
-      placeholder: 'List any existing medical conditions',
-      // unfillable: true
-    },
-    {
-      id: 'allergies',
-      label: 'Allergies',
-      type: 'textarea',
-      placeholder: 'List any allergies',
-      // unfillable: true
-    },
-    {
-      id: 'medications',
-      label: 'Current Medications',
-      type: 'textarea',
-      placeholder: 'List current medications and dosages',
-      // unfillable: true
-    },
-    {
-      id: 'familyHistory',
-      label: 'Family Medical History',
-      type: 'textarea',
-      placeholder: 'Describe relevant family medical history',
-      // unfillable: true
-    },
-    {
-      id: 'insuranceProvider',
-      label: 'Insurance Provider',
-      type: 'text',
-      placeholder: 'Enter your insurance provider name',
-      required: true
-    },
-    {
-      id: 'insuranceNumber',
-      label: 'Insurance Policy Number',
-      type: 'text',
-      placeholder: 'Enter your insurance policy number',
-      required: true
-    },
-    {
-      id: 'signature',
-      label: 'Patient Signature',
-      type: 'signature',
-      required: true
-    }
-  ]);
+  const [formFields, setFormFields] = useState<FormField[]>([]);
+  const [isFormFieldsLoading, setIsFormFieldsLoading] = useState(true);
+
+  useEffect(() => {
+    // Load form fields from JSON file
+    fetch('../../temp/curr_form.json')
+      .then(response => response.json())
+      .then(data => {
+        setFormFields(data.formFields);
+        setIsFormFieldsLoading(false);
+      })
+      .catch(error => {
+        console.error('Error loading form fields:', error);
+        setIsFormFieldsLoading(false);
+      });
+  }, []);
 
   const handleFileUpload = (files: File[]) => {
     const newFiles = files.map(file => ({
@@ -192,6 +98,7 @@ export default function Index() {
           formValues={formValues}
           onFieldsMentioned={handleFieldsMentioned}
           onFieldsUpdated={handleFieldsUpdated}
+          isFormFieldsLoading={isFormFieldsLoading}
         />
       </div>
       <div className="w-2/3 overflow-y-auto bg-gray-50">

@@ -654,6 +654,8 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "6. If asked about information not in our records, suggest relevant documents they can provide\n"
             "7. IMPORTANT: If you can determine values for ANY form fields based on the conversation and the PATIENT INFORMATION that currently have a value of MISSING, include AS MANY of them as possible in a JSON object at the end of your response with the format:\n"
             "   {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
+            "   Only provide field_updates for fields that are in the CURRENT MEDICAL FORM FIELDS AND VALUES and have a value of MISSING. Use the associated IDs. Only choose from the IDs in the existing form fields, not the patient info ones.\n"
+            "   Only update field values if you have the actual new value. Don't use place-holders.\n"
             "   Do NOT ask the patient to confirm this information in the chat. Just provide the new values in the JSON object at the end with its 'field_updates' key as specified.\n"
             "   Do NOT reference this JSON object in the chat, just print it out as specified above. It will be filtered out before shown to the user.\n"
             "   Also, the field from the PATIENT INFORMATION doesn't have to be exactly the same as the field in the form. You can use the PATIENT INFORMATION to determine the new value for the form field.\n"
@@ -717,7 +719,7 @@ def main():
             logging.info(f"Document data: {data}")
             
         chunks = split_documents(data)
-        llm = ChatOllama(model=MODEL_NAME, temperature=0.3)
+        llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
         key_value_info = extract_key_value_info(chunks, None, llm)
         logging.info(f"Extracted key-value pairs: {key_value_info}")
         
@@ -781,7 +783,7 @@ def main():
             print(json.dumps({"error": "No user information found. Run in 'ingest' mode first."}))
             return
             
-        llm = ChatOllama(model=MODEL_NAME, temperature=0.3)
+        llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
         
         if args.document:
             # Update via document
