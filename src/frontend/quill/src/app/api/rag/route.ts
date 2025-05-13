@@ -1,12 +1,7 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { NextResponse } from 'next/server';
-import os from 'os';
-import { writeFile } from 'fs/promises';
 import path from 'path';
 import fs from 'fs/promises';
-
-const execPromise = promisify(exec);
+import axios from 'axios';
 
 // Add new interfaces
 interface FormFieldValue {
@@ -23,87 +18,8 @@ interface UserInfo {
 const USER_INFO_PATH = path.join('..', '..', 'uploads', 'user_info.json');
 const FORM_VALUES_PATH = path.join('..', '..', 'uploads', 'form_values.json');
 
-// Add helper functions for managing user info and form values
-async function loadUserInfo(): Promise<UserInfo> {
-  try {
-    const data = await fs.readFile(USER_INFO_PATH, 'utf-8');
-    return JSON.parse(data);
-  } catch (error: unknown) {
-    console.log('No existing user info found, starting fresh');
-    return {};
-  }
-}
-
-async function saveUserInfo(info: UserInfo): Promise<void> {
-  await fs.writeFile(USER_INFO_PATH, JSON.stringify(info, null, 2));
-}
-
-async function loadFormValues(): Promise<FormFieldValue[]> {
-  try {
-    const data = await fs.readFile(FORM_VALUES_PATH, 'utf-8');
-    return JSON.parse(data);
-  } catch (error: unknown) {
-    console.log('No existing form values found, starting fresh');
-    return [];
-  }
-}
-
-async function saveFormValues(values: FormFieldValue[]): Promise<void> {
-  await fs.writeFile(FORM_VALUES_PATH, JSON.stringify(values, null, 2));
-}
-
-async function saveUploadedFile(file: Buffer, fileName: string): Promise<string> {
-  try {
-    const uploadsDir = path.join('..', '..', 'uploads');
-    try {
-      await fs.access(uploadsDir);
-    } catch {
-      await fs.mkdir(uploadsDir, { recursive: true });
-    }
-
-    const filePath = path.join(uploadsDir, fileName);
-    await writeFile(filePath, file);
-    console.log('File saved successfully at:', filePath);
-    return filePath;
-  } catch (error) {
-    console.error('Error saving file:', error);
-    throw error;
-  }
-}
-
-async function runPythonScript(scriptPath: string, args: string[]) {
-  const isWindows = os.platform() === 'win32';
-  const condaEnv = 'quill';
-
-  const quotedArgs = args.map(arg => {
-    if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('{')) {
-      const escapedArg = arg.replace(/"/g, '\\"');
-      return `"${escapedArg}"`;
-    }
-    return arg;
-  }).join(' ');
-
-  let command;
-  if (isWindows) {
-    command = `python "${scriptPath}" ${quotedArgs}`;
-  } else {
-    command = `python3 "${scriptPath}" ${quotedArgs}`;
-  }
-  
-  console.log('Executing command:', command);
-  
-  try {
-    const result = await execPromise(command);
-    console.log('Python script stdout:', result.stdout);
-    if (result.stderr) {
-      console.log('Python script stderr:', result.stderr);
-    }
-    return result;
-  } catch (error) {
-    console.error('Error running Python script:', error);
-    throw error;
-  }
-}
+// Define FastAPI server URL
+const FASTAPI_URL = 'http://localhost:8000';
 
 /**
  * Simple sentiment classifier to detect if a message is requesting an update to user information
@@ -172,13 +88,29 @@ function isUpdateRequest(message: string): boolean {
 // Add CORS headers to response
 function addCorsHeaders(response: NextResponse) {
   response.headers.set('Access-Control-Allow-Origin', '*');
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
   return response;
 }
 
-export async function OPTIONS() {
-  return addCorsHeaders(new NextResponse(null, { status: 204 }));
+export async function OPTIONS(request: Request) {
+  // Handle preflight requests
+  const requestHeaders = new Headers(request.headers);
+  const origin = requestHeaders.get('Origin') || '*';
+  
+  const response = new NextResponse(null, { 
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Access-Control-Max-Age': '86400', // 24 hours
+      'Vary': 'Origin' // Important for caching responses from different origins
+    }
+  });
+  
+  return response;
 }
 
 export async function POST(request: Request) {
@@ -188,21 +120,6 @@ export async function POST(request: Request) {
     const mode = formData.get('mode');
     console.log('Request mode:', mode);
 
-    const ragScriptPath = path.join('..', '..', 'rag_v4', 'quill_rag_v4.py');
-    const writePdfScriptPath = path.join('..', '..', 'document_creation', 'write_pdf.py');
-    
-    try {
-      await fs.access(ragScriptPath);
-      console.log('RAG script found at:', ragScriptPath);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('RAG script not found:', errorMessage);
-      return addCorsHeaders(NextResponse.json(
-        { error: 'RAG script not found', details: errorMessage },
-        { status: 500 }
-      ));
-    }
-
     if (mode === 'ingest') {
       const file = formData.get('file') as File;
       if (!file) {
@@ -211,158 +128,120 @@ export async function POST(request: Request) {
 
       console.log('Processing file:', file.name);
       const buffer = Buffer.from(await file.arrayBuffer());
-      const filePath = await saveUploadedFile(buffer, file.name);
-
-      console.log('About to run ingestion script with file:', filePath);
-
-      const { stdout } = await runPythonScript(
-        ragScriptPath,
-        ['--mode', 'ingest', '--document', filePath]
-      );
-
-      console.log('Ingestion script output:', stdout);
-
+      
+      // Create a new FormData to send to the FastAPI server
+      const apiFormData = new FormData();
+      const blob = new Blob([buffer], { type: file.type });
+      apiFormData.append('file', blob, file.name);
+      
       try {
-        const result = JSON.parse(stdout);
-        return addCorsHeaders(NextResponse.json(result));
-      } catch {
-        return addCorsHeaders(NextResponse.json({ 
-          message: 'Document processed successfully',
-          details: stdout 
-        }));
+        // Call the FastAPI ingest endpoint
+        const response = await axios.post(`${FASTAPI_URL}/ingest`, apiFormData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        return addCorsHeaders(NextResponse.json(response.data));
+      } catch (error: any) {
+        console.error('Error calling FastAPI ingest endpoint:', error.response?.data || error.message);
+        return addCorsHeaders(NextResponse.json(
+          { error: 'Failed to process document', details: error.response?.data || error.message },
+          { status: error.response?.status || 500 }
+        ));
       }
     } 
     else if (mode === 'query') {
       const message = formData.get('message') as string;
       const documentName = formData.get('documentName') as string;
+      if (documentName) {
+        console.log('Document name from route.ts:', documentName);
+      }
       const chatHistory = formData.get('chatHistory') as string;
       const formFields = formData.get('formFields') as string;
 
-      if (!message || !documentName) {
+      if (!message) {
         return addCorsHeaders(NextResponse.json({ 
-          error: 'Message and document name are required' 
+          error: 'Message is required' 
         }, { status: 400 }));
       }
       
       // Determine if this is an update request or a regular query
-      // const isUpdate = isUpdateRequest(message);
-      const isUpdate = false; // For now, do not handle update requests, just go straight through query mechanism (for demo, later we want to use full RAG functionality and the whole quill_rag_v4 API).
-      const scriptMode = isUpdate ? 'update' : 'query';
-      console.log(`Message classified as ${scriptMode} request:`, message);
+      const isUpdate = isUpdateRequest(message);
+      const endpoint = isUpdate ? 'update' : 'query';
+      console.log(`Message classified as ${endpoint} request:`, message);
       
-      // Set up the base arguments
-      const args = [
-        '--mode', scriptMode
-      ];
+      // Set up the API form data
+      const apiFormData = new FormData();
+      apiFormData.append('message', message);
       
-      // Both modes need the question/message
-      args.push('--question', message);
+      if (documentName) {
+        apiFormData.append('documentName', documentName);
+      }
       
-      // Add chat history for context if available
       if (chatHistory) {
-        const tempChatHistoryPath = path.join('..', '..', 'uploads', 'temp_chat_history.json');
-        await writeFile(tempChatHistoryPath, chatHistory);
-        args.push('--chat-history', tempChatHistoryPath);
+        apiFormData.append('chatHistory', chatHistory);
       }
-
-      if (formFields) {
-        args.push('--form-fields', formFields);
+      
+      if (formFields && endpoint === 'query') {
+        apiFormData.append('formFields', formFields);
       }
-
-      const { stdout } = await runPythonScript(ragScriptPath, args);
-
+      
       try {
-        const result = JSON.parse(stdout);
-        if (scriptMode === 'update') {
+        // Call the appropriate FastAPI endpoint
+        const response = await axios.post(`${FASTAPI_URL}/${endpoint}`, apiFormData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        if (endpoint === 'update') {
           return addCorsHeaders(NextResponse.json({
-            content: `I've updated your information. ${result.message || ''}`,
+            content: response.data.content || `I've updated your information. ${response.data.message || ''}`,
             wasUpdate: true,
-            ...result
+            ...response.data
           }));
         } else {
-          return addCorsHeaders(NextResponse.json({ content: result.response }));
+          return addCorsHeaders(NextResponse.json({ content: response.data.content }));
         }
-      } catch {
-        if (scriptMode === 'update') {
-          return addCorsHeaders(NextResponse.json({ 
-            content: 'I\'ve updated your information based on your message.',
-            wasUpdate: true,
-            details: stdout
-          }));
-        } else {
-          return addCorsHeaders(NextResponse.json({ content: stdout.trim() }));
-        }
+      } catch (error: any) {
+        console.error(`Error calling FastAPI ${endpoint} endpoint:`, error.response?.data || error.message);
+        return addCorsHeaders(NextResponse.json(
+          { error: `Failed to process ${endpoint} request`, details: error.response?.data || error.message },
+          { status: error.response?.status || 500 }
+        ));
       }
     } 
     else if (mode === 'blank') {
       const file = formData.get('file') as File;
-      // const jsonString = formData.get('jsonString') as string;
     
       console.log('Processing blank form:', file.name);
       const buffer = Buffer.from(await file.arrayBuffer());
-      const filePath = await saveUploadedFile(buffer, file.name);
-    
-      const sample_json = '{ "Employee social security number": "000-11-2222", \
-      "Employer identification number": "999-888-777", \
-      "Wages, tips, other compensation": "64000" }'
-    
-      const questionPrompt = `You are a helpful, form-filling assistant. The user will provide you with an image of a blank or partially-filled form. For each field, your task is to generate the answer to the question, 'What is the value of the field?' and add the field label and its answer as a key-value pair to a .JSON file. If the answer to the field is not already in the form, check if you can find the answer in the chat history. Here is an example response: ${sample_json} ONLY RESPOND WITH THE OUTPUT OF A .JSON FILE WITH NO ADDITIONAL TEXT`;
-    
-      const fields = await runPythonScript(
-        ragScriptPath,
-        ['--mode', 'query', '--document', filePath, '--question', questionPrompt]);
-    
-      let jsonString = fields.stdout;
-      console.log('Raw JSON string:', jsonString);
       
-      // Parse the JSON string if it's in the {"response": "..."} format
+      // Create a new FormData to send to the FastAPI server
+      const apiFormData = new FormData();
+      const blob = new Blob([buffer], { type: file.type });
+      apiFormData.append('file', blob, file.name);
+      
       try {
-        const parsedOutput = JSON.parse(jsonString);
-        if (parsedOutput.response) {
-          // Extract the inner JSON string
-          jsonString = parsedOutput.response;
-          
-          // If the inner string is escaped JSON, parse it again to clean it up
-          try {
-            const innerJson = JSON.parse(jsonString);
-            jsonString = JSON.stringify(innerJson);
-          } catch (e) {
-            // If we can't parse it as JSON, just use it as is
-            console.log('Using response string directly');
+        // Call the FastAPI blank endpoint
+        const response = await axios.post(`${FASTAPI_URL}/blank`, apiFormData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
           }
-        }
-      } catch (e) {
-        console.log('Output is not in {"response": "..."} format, using as is');
-      }
-      
-      console.log('Processed JSON string:', jsonString);
-      
-      // Create a temporary JSON file for the filled form data
-      const jsonFilePath = path.join('..', '..', 'uploads', 'temp_form_data.json');
-      await fs.writeFile(jsonFilePath, jsonString);
-      
-      const { stdout } = await runPythonScript(
-        writePdfScriptPath,
-        [filePath, jsonFilePath]
-      );
-    
-      // Get the filled PDF path - it should be the same as original but with "_filled.pdf" suffix
-      const outputPath = filePath.replace(/\.[^/.]+$/, '') + '_filled.pdf';
-      console.log('Filled form saved at:', outputPath);
-      
-      try {
-        const result = JSON.parse(stdout);
+        });
+        
         return addCorsHeaders(NextResponse.json({
           message: 'Blank form processed successfully',
-          details: stdout,
-          filledFormPath: outputPath
+          details: response.data.fields,
+          filledFormPath: response.data.filledFormPath
         }));
-      } catch {
-        return addCorsHeaders(NextResponse.json({ 
-          message: 'Blank form processed successfully',
-          details: stdout,
-          filledFormPath: outputPath
-        }));
+      } catch (error: any) {
+        console.error('Error calling FastAPI blank endpoint:', error.response?.data || error.message);
+        return addCorsHeaders(NextResponse.json(
+          { error: 'Failed to process blank form', details: error.response?.data || error.message },
+          { status: error.response?.status || 500 }
+        ));
       }
     }
     else if (mode === 'update-form-values') {
@@ -373,29 +252,36 @@ export async function POST(request: Request) {
 
       try {
         const formValues = JSON.parse(values);
-        await saveFormValues(formValues);
+        
+        // Call the FastAPI update-form-values endpoint
+        const response = await axios.post(`${FASTAPI_URL}/update-form-values`, {
+          values: formValues
+        });
+        
         return addCorsHeaders(NextResponse.json({ 
           message: 'Form values updated successfully',
           values: formValues
         }));
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      } catch (error: any) {
+        console.error('Error updating form values:', error.response?.data || error.message);
         return addCorsHeaders(NextResponse.json({ 
           error: 'Invalid form values format',
-          details: errorMessage 
-        }, { status: 400 }));
+          details: error.response?.data || error.message 
+        }, { status: error.response?.status || 500 }));
       }
     }
     else if (mode === 'get-form-values') {
       try {
-        const values = await loadFormValues();
-        return addCorsHeaders(NextResponse.json({ values }));
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        // Call the FastAPI get-form-values endpoint
+        const response = await axios.get(`${FASTAPI_URL}/get-form-values`);
+        
+        return addCorsHeaders(NextResponse.json({ values: response.data.values }));
+      } catch (error: any) {
+        console.error('Error getting form values:', error.response?.data || error.message);
         return addCorsHeaders(NextResponse.json({ 
           error: 'Failed to load form values',
-          details: errorMessage 
-        }, { status: 500 }));
+          details: error.response?.data || error.message 
+        }, { status: error.response?.status || 500 }));
       }
     }
     else if (mode === 'update-user-info') {
@@ -406,29 +292,36 @@ export async function POST(request: Request) {
 
       try {
         const userInfo = JSON.parse(info);
-        await saveUserInfo(userInfo);
+        
+        // Call the FastAPI update-user-info endpoint
+        const response = await axios.post(`${FASTAPI_URL}/update-user-info`, {
+          info: userInfo
+        });
+        
         return addCorsHeaders(NextResponse.json({ 
           message: 'User info updated successfully',
           info: userInfo
         }));
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      } catch (error: any) {
+        console.error('Error updating user info:', error.response?.data || error.message);
         return addCorsHeaders(NextResponse.json({ 
           error: 'Invalid user info format',
-          details: errorMessage 
-        }, { status: 400 }));
+          details: error.response?.data || error.message 
+        }, { status: error.response?.status || 500 }));
       }
     }
     else if (mode === 'get-user-info') {
       try {
-        const info = await loadUserInfo();
-        return addCorsHeaders(NextResponse.json({ info }));
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        // Call the FastAPI get-user-info endpoint
+        const response = await axios.get(`${FASTAPI_URL}/get-user-info`);
+        
+        return addCorsHeaders(NextResponse.json({ info: response.data.info }));
+      } catch (error: any) {
+        console.error('Error getting user info:', error.response?.data || error.message);
         return addCorsHeaders(NextResponse.json({ 
           error: 'Failed to load user info',
-          details: errorMessage 
-        }, { status: 500 }));
+          details: error.response?.data || error.message 
+        }, { status: error.response?.status || 500 }));
       }
     }
 
