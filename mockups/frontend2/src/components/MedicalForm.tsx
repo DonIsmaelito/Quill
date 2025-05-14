@@ -112,10 +112,10 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   }));
 
   return (
-    <Card className="bg-white shadow-sm">
-      <div className="px-8 py-6 border-b border-gray-100">
-        <h2 className="text-3xl font-semibold text-gray-900">New Patient Registration</h2>
-        <p className="mt-2 text-base text-gray-500">Please fill out all required fields marked with an asterisk (*)</p>
+    <Card className="bg-white dark:bg-gray-900 shadow-sm">
+      <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800">
+        <h2 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">New Patient Registration</h2>
+        <p className="mt-2 text-base text-gray-500 dark:text-gray-400">Please fill out all required fields marked with an asterisk (*)</p>
       </div>
       <form onSubmit={handleSubmit} className="p-8">
         <div ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -138,12 +138,12 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
             />
           ))}
         </div>
-        <div className="flex justify-between mt-10 pt-6 border-t border-gray-100">
+        <div className="flex justify-between mt-10 pt-6 border-t border-gray-100 dark:border-gray-800">
           <Button
             type="button"
             variant="outline"
             onClick={handleReview}
-            className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            className="border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             Review Registration
           </Button>

@@ -85,11 +85,11 @@
 }
 
 .assistant-panel {
-  @apply border-r border-gray-200 bg-white;
+  @apply border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800;
   width: 350px;
   min-width: 350px;
 }
 
 .form-panel {
-  @apply bg-lightGray flex-1 p-6 overflow-y-auto;
+  @apply bg-lightGray dark:bg-gray-900 flex-1 p-6 overflow-y-auto;
 }

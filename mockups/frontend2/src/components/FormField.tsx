@@ -160,7 +160,7 @@ const FormField: React.FC<FormFieldProps> = ({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={id} className="flex items-center gap-1 text-base font-medium text-gray-700">
+      <Label htmlFor={id} className="flex items-center gap-1 text-base font-medium text-gray-700 dark:text-gray-300">
         {label}
         {required && <span className="text-red-500">*</span>}
       </Label>
