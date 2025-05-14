@@ -83,11 +83,41 @@ export default function AssignTemplatePage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      alert(
-                        `Assigning template ${templateId} to ${patient.name}`
-                      )
-                    }
+                    onClick={async () => {
+                      if (!templateId) return;
+                      const assignment = {
+                        templateId,
+                        patientId: patient.id,
+                        patientName: patient.name,
+                        assignedAt: new Date().toISOString(),
+                      };
+
+                      try {
+                        const res = await fetch(
+                          "http://localhost:5173/api/assign",
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(assignment),
+                          }
+                        );
+
+                        if (!res.ok) {
+                          const err = await res.json();
+                          throw new Error(err?.error || "Failed to assign");
+                        }
+
+                        const data = await res.json();
+                        alert(
+                          `Template assigned successfully! Saved as ${data.filename}`
+                        );
+                      } catch (error: any) {
+                        console.error(error);
+                        alert(`Error assigning template: ${error.message}`);
+                      }
+                    }}
                   >
                     <UserPlus className="h-4 w-4 mr-2" />
                     Assign

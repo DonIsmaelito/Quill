@@ -1,1 +1,21 @@
+# Ignore OS junk
 *.DS_Store
+
+# ─── Node / Bun ───────────────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ─── Build outputs ────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+
+# ─── Runtime temp & generated files ───────────────────────
+temp/
+**/temp/
+
+# ─── IDE / Editor configs ─────────────────────────────────
+.vscode/
+.idea/
+*.log

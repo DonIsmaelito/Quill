@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { SearchBar } from "@/components/dashboard/SearchBar";
@@ -22,7 +21,9 @@ export default function AdminDashboard() {
           {/* Top bar */}
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-2xl font-semibold text-medical-text">Dashboard</h1>
+              <h1 className="text-2xl font-semibold text-medical-text">
+                Dashboard
+              </h1>
               <p className="text-medical-subtext">Form Management Overview</p>
             </div>
             <div className="flex items-center gap-6">
@@ -38,7 +39,7 @@ export default function AdminDashboard() {
           <StatCards />
 
           {/* Charts */}
-          <ChartSection />
+          {/* <ChartSection /> */}
 
           {/* Form Status and Appointments */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
