@@ -23,7 +23,7 @@ export default function AdminDashboard() {
   const nextAppointmentData = {
     patientName: "Jonathan Doe",
     appointmentTime: new Date(Date.now() + 12 * 60000),
-    doctorName: "Dr. Ismael",
+    doctorName: "Dr. Smith",
     reason: "First Time Patient Check-up",
     missingForms: [
       {

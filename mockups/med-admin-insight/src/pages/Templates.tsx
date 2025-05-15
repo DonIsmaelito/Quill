@@ -76,21 +76,6 @@ export default function Templates() {
   const [searchTerm, setSearchTerm] = useState("");
   const [templates, setTemplates] = useState<TemplateData[]>([
     {
-      id: "patient-intake-form",
-      name: "Patient Intake Form",
-      category: "Administrative",
-      uses: 156,
-      pdfUrl: "/Patient_Intake_Form.pdf",
-      description:
-        "Standard form for new patient registration and basic information gathering.",
-      tags: ["new patient", "registration", "intake"],
-      signatureFields: ["patient", "guarantor"],
-      version: 3,
-      lastEditedBy: { name: "Alice Johnson", avatarUrl: "/avatars/01.png" },
-      lastEditedOn: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      complianceStatus: "ok",
-    },
-    {
       id: "medical-history-form",
       name: "Medical History Form",
       category: "Clinical",

@@ -34,7 +34,7 @@ const roles: RoleConfig[] = [
 ];
 
 export function UserProfile() {
-  const [currentUserName, setCurrentUserName] = useState("Ismael Ito");
+  const [currentUserName, setCurrentUserName] = useState("Dr. Smith");
   const [currentRole, setCurrentRole] = useState<UserRole>("Admin");
 
   const handleSwitchRole = (newRole: UserRole) => {

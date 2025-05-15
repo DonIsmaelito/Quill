@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +11,7 @@ import {
   PlusCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import type { MissingForm, NextAppointmentProps } from "./NextAppointmentCard"; // Assuming types are exported
 
 interface AppointmentDetailsModalProps {
@@ -65,9 +66,29 @@ const getFormStatusDetails = (status: MissingForm["status"]) => {
   }
 };
 
-export const AppointmentDetailsModal: React.FC<
-  AppointmentDetailsModalProps
-> = ({ isOpen, onClose, appointment }) => {
+export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = ({
+  isOpen,
+  onClose,
+  appointment,
+}) => {
+  const { toast } = useToast();
+  const [forms, setForms] = useState(appointment.missingForms);
+
+  const handleAssignForm = (formIndex: number) => {
+    const updatedForms = [...forms];
+    updatedForms[formIndex] = {
+      ...updatedForms[formIndex],
+      status: "pending",
+    };
+    setForms(updatedForms);
+
+    toast({
+      title: "Form Assigned",
+      description: `${updatedForms[formIndex].name} has been assigned and sent to the patient.`,
+      duration: 3000,
+    });
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -114,9 +135,9 @@ export const AppointmentDetailsModal: React.FC<
           <h3 className="text-lg font-medium text-gray-800 mb-3">
             Form Status Overview:
           </h3>
-          {appointment.missingForms.length > 0 ? (
+          {forms.length > 0 ? (
             <ul className="space-y-3">
-              {appointment.missingForms.map((form, index) => {
+              {forms.map((form, index) => {
                 const statusDetails = getFormStatusDetails(form.status);
                 return (
                   <li
@@ -144,7 +165,7 @@ export const AppointmentDetailsModal: React.FC<
                           form.status === "completed"
                             ? "default"
                             : form.status === "pending"
-                            ? "warning"
+                            ? "secondary"
                             : "destructive"
                         }
                         className={cn(
@@ -165,20 +186,25 @@ export const AppointmentDetailsModal: React.FC<
                     </p>
                     <div className="ml-7 flex items-center gap-2">
                       {form.status === "pending" && (
-                        <Button size="xs" variant="outline" className="text-xs">
+                        <Button size="sm" variant="outline" className="text-xs">
                           <Send className="h-3.5 w-3.5 mr-1.5" /> Send Reminder
                         </Button>
                       )}
                       {form.status === "missing" && (
-                        <Button size="xs" variant="outline" className="text-xs">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs"
+                          onClick={() => handleAssignForm(index)}
+                        >
                           <PlusCircle className="h-3.5 w-3.5 mr-1.5" />{" "}
                           Assign/Re-send Form
                         </Button>
                       )}
                       {form.status === "completed" && (
                         <Button
-                          size="xs"
-                          variant="outline_primary"
+                          size="sm"
+                          variant="outline"
                           className="text-xs"
                         >
                           <Eye className="h-3.5 w-3.5 mr-1.5" /> View Submitted
