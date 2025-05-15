@@ -1,6 +1,18 @@
-
 import { Button } from "@/components/ui/button";
-import { Edit, MoreVertical, Trash2 } from "lucide-react";
+import {
+  Edit,
+  MoreVertical,
+  Trash2,
+  FileDown,
+  UploadCloud,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Appointment = {
   id: string;
@@ -18,15 +30,51 @@ interface AppointmentsTableProps {
 }
 
 export function AppointmentsTable({ appointments }: AppointmentsTableProps) {
+  const handleExportCSV = () => console.log("Export Appointments to CSV");
+  const handlePushToBilling = () =>
+    console.log("Push Appointments to Billing System");
+
   return (
-    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden h-full flex flex-col">
       <div className="flex justify-between items-center p-4 border-b">
-        <h2 className="text-lg font-semibold text-medical-text">Upcoming Appointments</h2>
-        <Button variant="link" className="text-medical-primary">
-          Show all
-        </Button>
+        <h2 className="text-lg font-semibold text-medical-text">
+          Upcoming Appointments
+        </h2>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="link"
+            className="text-medical-primary text-sm h-auto py-1 px-2"
+          >
+            Show all
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-gray-500 hover:text-gray-700"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={handleExportCSV}
+                className="flex items-center gap-2"
+              >
+                <FileDown className="h-4 w-4 opacity-70" /> Export CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handlePushToBilling}
+                className="flex items-center gap-2"
+              >
+                <UploadCloud className="h-4 w-4 opacity-70" /> Push to Billing
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto flex-grow">
         <table className="w-full">
           <thead>
             <tr className="border-b bg-gray-50">
@@ -56,11 +104,15 @@ export function AppointmentsTable({ appointments }: AppointmentsTableProps) {
                 <td className="py-3 px-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <input type="checkbox" className="mr-2" />
-                    <span className="text-sm text-medical-text">{appointment.id}</span>
+                    <span className="text-sm text-medical-text">
+                      {appointment.id}
+                    </span>
                   </div>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <span className="text-sm font-medium text-medical-text">{appointment.patientName}</span>
+                  <span className="text-sm font-medium text-medical-text">
+                    {appointment.patientName}
+                  </span>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
                   <div className="flex items-center">
@@ -69,18 +121,24 @@ export function AppointmentsTable({ appointments }: AppointmentsTableProps) {
                       alt={appointment.doctor.name}
                       className="h-8 w-8 rounded-full mr-2"
                     />
-                    <span className="text-sm text-medical-text">{appointment.doctor.name}</span>
+                    <span className="text-sm text-medical-text">
+                      {appointment.doctor.name}
+                    </span>
                   </div>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <span className="text-sm text-medical-text">{appointment.time}</span>
+                  <span className="text-sm text-medical-text">
+                    {appointment.time}
+                  </span>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                    appointment.disease === 'Fracture' 
-                      ? 'bg-blue-50 text-blue-600' 
-                      : 'bg-green-50 text-green-600'
-                  }`}>
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                      appointment.disease === "Fracture"
+                        ? "bg-blue-50 text-blue-600"
+                        : "bg-green-50 text-green-600"
+                    }`}
+                  >
                     {appointment.disease}
                   </span>
                 </td>

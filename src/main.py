@@ -15,6 +15,19 @@ def start_frontend():
         os.chdir(frontend_path)
         print(f"Starting Next.js development server in {frontend_path}...")
         
+        # (NEW) Ensure dependencies are installed before running dev server
+        node_modules_path = os.path.join(frontend_path, 'node_modules')
+        if not os.path.isdir(node_modules_path):
+            print("node_modules not found. Installing npm dependencies...")
+            subprocess.run(
+                f"{npm_cmd} install",
+                shell=True,
+                check=True,
+                text=True
+            )
+        else:
+            print("Dependencies already installed. Skipping npm install.")
+        
         # Run npm run dev with shell=True for Windows
         process = subprocess.run(
             f"{npm_cmd} run dev",
