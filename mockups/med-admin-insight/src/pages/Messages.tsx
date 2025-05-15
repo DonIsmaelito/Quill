@@ -149,150 +149,161 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-medical-background">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50">
       <Sidebar />
-      <div className="flex-1 flex overflow-hidden">
-        {/* Conversation List */}
-        <div className="w-1/3 border-r border-gray-200 bg-white flex flex-col">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-medical-text">
-              Messages
-            </h2>
-            {/* Future search bar can go here */}
-          </div>
-          <ScrollArea className="flex-1">
-            {conversations.map((conv) => (
-              <div
-                key={conv.id}
-                className={`p-4 flex items-center cursor-pointer hover:bg-gray-100 ${
-                  selectedConversation?.id === conv.id ? "bg-gray-100" : ""
-                }`}
-                onClick={() => handleSelectConversation(conv.id)}
-              >
-                <Avatar className="h-10 w-10 mr-3">
-                  <AvatarImage
-                    src={conv.contactAvatar}
-                    alt={conv.contactName}
-                  />
-                  <AvatarFallback>
-                    {conv.contactName
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center">
-                    <p className="font-medium text-medical-text truncate">
-                      {conv.contactName}
-                    </p>
-                    <p className="text-xs text-medical-subtext">
-                      {conv.lastMessageTimestamp.toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  <p className="text-sm text-medical-subtext truncate">
-                    {conv.lastMessage}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </ScrollArea>
-        </div>
-
-        {/* Chat Window */}
-        <div className="flex-1 flex flex-col bg-white">
-          {selectedConversation ? (
-            <>
-              <div className="p-4 border-b border-gray-200 flex items-center">
-                <Avatar className="h-10 w-10 mr-3">
-                  <AvatarImage
-                    src={selectedConversation.contactAvatar}
-                    alt={selectedConversation.contactName}
-                  />
-                  <AvatarFallback>
-                    {selectedConversation.contactName
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-semibold text-medical-text">
-                    {selectedConversation.contactName}
-                  </p>
-                  {/* Future status (Online/Offline) can go here */}
-                </div>
-              </div>
-              <ScrollArea className="flex-1 p-4 space-y-4">
-                {selectedConversation.messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${
-                      msg.sender === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`max-w-xs lg:max-w-md p-3 rounded-lg ${
-                        msg.sender === "user"
-                          ? "bg-medical-primary text-white"
-                          : "bg-gray-200 text-medical-text"
-                      }`}
-                    >
-                      <p className="text-sm">{msg.text}</p>
-                      <p
-                        className={`text-xs mt-1 ${
-                          msg.sender === "user"
-                            ? "text-gray-200/80 text-right"
-                            : "text-gray-500 text-left"
-                        }`}
-                      >
-                        {msg.timestamp.toLocaleTimeString([], {
+      <div className="flex-1 p-6 md:p-8 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden rounded-xl shadow-xl bg-white">
+          <div className="w-1/3 border-r border-gray-200 flex flex-col">
+            <div className="p-4 border-b border-gray-200">
+              <h1 className="text-xl font-semibold text-medical-text">
+                Messages
+              </h1>
+            </div>
+            <ScrollArea className="flex-1">
+              {conversations.map((conv) => (
+                <div
+                  key={conv.id}
+                  className={`p-4 flex items-center cursor-pointer border-l-4 transition-colors duration-150 ${
+                    selectedConversation?.id === conv.id
+                      ? "bg-blue-50 border-medical-primary"
+                      : "border-transparent hover:bg-gray-100/50"
+                  }`}
+                  onClick={() => handleSelectConversation(conv.id)}
+                >
+                  <Avatar className="h-10 w-10 mr-3">
+                    <AvatarImage
+                      src={conv.contactAvatar}
+                      alt={conv.contactName}
+                    />
+                    <AvatarFallback>
+                      {conv.contactName
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center">
+                      <p className="font-medium text-medical-text truncate">
+                        {conv.contactName}
+                      </p>
+                      <p className="text-xs text-medical-subtext">
+                        {conv.lastMessageTimestamp.toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </p>
                     </div>
+                    <p className="text-sm text-medical-subtext truncate">
+                      {conv.lastMessage}
+                    </p>
                   </div>
-                ))}
-              </ScrollArea>
-              <div className="p-4 border-t border-gray-200 bg-white">
-                <form
-                  onSubmit={handleSendMessage}
-                  className="flex items-center gap-2"
-                >
-                  <Button variant="ghost" size="icon" type="button">
-                    <Paperclip className="h-5 w-5 text-gray-500" />
-                  </Button>
-                  <Button variant="ghost" size="icon" type="button">
-                    <Smile className="h-5 w-5 text-gray-500" />
-                  </Button>
-                  <Input
-                    type="text"
-                    placeholder="Type a message..."
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="submit"
-                    size="icon"
-                    className="bg-medical-primary hover:bg-medical-primary/90"
+                </div>
+              ))}
+            </ScrollArea>
+          </div>
+
+          <div className="flex-1 flex flex-col bg-white">
+            {selectedConversation ? (
+              <>
+                <div className="p-4 border-b border-gray-200 flex items-center">
+                  <Avatar className="h-10 w-10 mr-3">
+                    <AvatarImage
+                      src={selectedConversation.contactAvatar}
+                      alt={selectedConversation.contactName}
+                    />
+                    <AvatarFallback>
+                      {selectedConversation.contactName
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-medical-text">
+                      {selectedConversation.contactName}
+                    </p>
+                    <p className="text-xs text-green-500">Online</p>
+                  </div>
+                </div>
+                <ScrollArea className="flex-1 p-6 space-y-4 bg-slate-50">
+                  {selectedConversation.messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex ${
+                        msg.sender === "user" ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-xs lg:max-w-md p-3 rounded-lg ${
+                          msg.sender === "user"
+                            ? "bg-medical-primary text-white shadow-md"
+                            : "bg-white text-medical-text border border-gray-200 shadow-sm"
+                        }`}
+                      >
+                        <p className="text-sm">{msg.text}</p>
+                        <p
+                          className={`text-xs mt-1 ${
+                            msg.sender === "user"
+                              ? "text-gray-200/80 text-right"
+                              : "text-gray-500 text-left"
+                          }`}
+                        >
+                          {msg.timestamp.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </ScrollArea>
+                <div className="p-4 border-t border-gray-200 bg-gray-50">
+                  <form
+                    onSubmit={handleSendMessage}
+                    className="flex items-center gap-3"
                   >
-                    <SendHorizonal className="h-5 w-5 text-white" />
-                  </Button>
-                </form>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      type="button"
+                      className="text-gray-500 hover:text-medical-primary"
+                    >
+                      <Paperclip className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      type="button"
+                      className="text-gray-500 hover:text-medical-primary"
+                    >
+                      <Smile className="h-5 w-5" />
+                    </Button>
+                    <Input
+                      type="text"
+                      placeholder="Type a message..."
+                      value={messageInput}
+                      onChange={(e) => setMessageInput(e.target.value)}
+                      className="flex-1 h-11 rounded-lg border-gray-300 focus:border-medical-primary focus:ring-medical-primary"
+                    />
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="bg-medical-primary hover:bg-medical-primary/90 rounded-lg aspect-square h-11 w-11 flex items-center justify-center"
+                    >
+                      <SendHorizonal className="h-5 w-5 text-white" />
+                    </Button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-medical-subtext">
+                  Select a conversation to start messaging.
+                </p>
               </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-medical-subtext">
-                Select a conversation to start messaging.
-              </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

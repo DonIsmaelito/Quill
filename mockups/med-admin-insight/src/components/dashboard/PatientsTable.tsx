@@ -1,6 +1,12 @@
-
 import { Button } from "@/components/ui/button";
-import { Edit, MoreVertical } from "lucide-react";
+import { Edit, MoreVertical, FileDown, UploadCloud } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Patient = {
   id: string;
@@ -9,7 +15,7 @@ type Patient = {
   age: number;
   dob: string;
   diagnosis: string;
-  triage: 'Non-Urgent' | 'Out Patient' | 'Emergency';
+  triage: "Non-Urgent" | "Out Patient" | "Emergency";
 };
 
 interface PatientsTableProps {
@@ -19,21 +25,23 @@ interface PatientsTableProps {
 export function PatientsTable({ patients }: PatientsTableProps) {
   const getTriageClass = (triage: string) => {
     switch (triage) {
-      case 'Non-Urgent':
-        return 'bg-blue-50 text-blue-600';
-      case 'Out Patient':
-        return 'bg-pink-50 text-pink-600';
-      case 'Emergency':
-        return 'bg-amber-50 text-amber-600';
+      case "Non-Urgent":
+        return "bg-blue-50 text-blue-600";
+      case "Out Patient":
+        return "bg-pink-50 text-pink-600";
+      case "Emergency":
+        return "bg-amber-50 text-amber-600";
       default:
-        return 'bg-gray-50 text-gray-600';
+        return "bg-gray-50 text-gray-600";
     }
   };
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
       <div className="flex justify-between items-center p-4 border-b">
-        <h2 className="text-lg font-semibold text-medical-text">Recent Patients</h2>
+        <h2 className="text-lg font-semibold text-medical-text">
+          Recent Patients
+        </h2>
         <Button variant="link" className="text-medical-primary">
           Show all
         </Button>
@@ -71,7 +79,9 @@ export function PatientsTable({ patients }: PatientsTableProps) {
                 <td className="py-3 px-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <input type="checkbox" className="mr-2" />
-                    <span className="text-sm text-medical-text">{patient.id}</span>
+                    <span className="text-sm text-medical-text">
+                      {patient.id}
+                    </span>
                   </div>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
@@ -81,20 +91,32 @@ export function PatientsTable({ patients }: PatientsTableProps) {
                       alt={patient.name}
                       className="h-8 w-8 rounded-full mr-2"
                     />
-                    <span className="text-sm font-medium text-medical-text">{patient.name}</span>
+                    <span className="text-sm font-medium text-medical-text">
+                      {patient.name}
+                    </span>
                   </div>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <span className="text-sm text-medical-text">{patient.age}</span>
+                  <span className="text-sm text-medical-text">
+                    {patient.age}
+                  </span>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <span className="text-sm text-medical-text">{patient.dob}</span>
+                  <span className="text-sm text-medical-text">
+                    {patient.dob}
+                  </span>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <span className="text-sm text-medical-text">{patient.diagnosis}</span>
+                  <span className="text-sm text-medical-text">
+                    {patient.diagnosis}
+                  </span>
                 </td>
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs rounded-full ${getTriageClass(patient.triage)}`}>
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs rounded-full ${getTriageClass(
+                      patient.triage
+                    )}`}
+                  >
                     {patient.triage}
                   </span>
                 </td>
