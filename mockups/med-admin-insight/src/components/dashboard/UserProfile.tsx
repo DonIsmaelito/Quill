@@ -26,7 +26,7 @@ export function UserProfile() {
               <AvatarFallback>JD</AvatarFallback>
             </Avatar>
             <div className="flex flex-col items-start text-sm">
-              <span className="font-medium text-medical-text">John Doe</span>
+              <span className="font-medium text-medical-text">JR Smith</span>
               <span className="text-xs text-medical-subtext">Admin</span>
             </div>
             <ChevronDown className="h-4 w-4 text-medical-subtext" />

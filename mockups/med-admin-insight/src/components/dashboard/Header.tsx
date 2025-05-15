@@ -7,7 +7,7 @@ export function Header() {
     <div className="bg-medical-primary rounded-xl p-6 flex justify-between items-center text-white mb-6">
       <div>
         <h1 className="text-2xl font-semibold">
-          Welcome to MedMinute, John Doe
+          Welcome back, Dr. Smith!
         </h1>
         <p className="text-white/80 mt-1">
           Streamline your medical forms and reduce administrative workload
