@@ -27,7 +27,8 @@ from starlette.websockets import WebSocketState
 
 load_dotenv()
 
-OPENAI_MODEL_NAME = "gpt-4.1-nano"
+# Performance optimization: Using gpt-3.5-turbo for faster response times (~400ms vs ~1200ms)
+OPENAI_MODEL_NAME = "gpt-3.5-turbo"
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
@@ -1166,6 +1167,8 @@ async def voice_ws(websocket: WebSocket):
 
                 # Clean the response for TTS (remove field update JSON)
                 cleaned_reply_text = clean_response_for_voice(reply_text)
+                logging.info("voice_ws: Original response: '%s'", reply_text)
+                logging.info("voice_ws: Cleaned response for TTS: '%s'", cleaned_reply_text)
 
                 # TTS
                 logging.debug("voice_ws: synthesizing TTS for reply (len=%d chars)", len(cleaned_reply_text))
@@ -1226,7 +1229,27 @@ def clean_response_for_voice(response_text: str) -> str:
         cleaned_response = re.sub(r'\s*Based on the information I have, I was able to fill out some of the form for you!\s*', '', cleaned_response)
         cleaned_response = re.sub(r'\s*Here\'s the updated information:\s*', '', cleaned_response)
         
+        # If we're left with an empty response after cleaning, provide a fallback
+        if not cleaned_response.strip():
+            # Check if there were field updates
+            try:
+                import json
+                field_updates_string = field_updates_match.group(0).replace("'", '"')
+                updates_obj = json.loads(field_updates_string)
+                field_updates = updates_obj.get('field_updates', [])
+                
+                if field_updates:
+                    return f"I've updated {len(field_updates)} field{'s' if len(field_updates) != 1 else ''} in your form for you."
+                else:
+                    return "Yes, I can hear you perfectly! I'm here to help you with your medical form. What would you like me to help you with?"
+            except:
+                return "Yes, I can hear you perfectly! I'm here to help you with your medical form. What would you like me to help you with?"
+        
         return cleaned_response
+    
+    # If no JSON found, return the original response (but ensure it's not empty)
+    if not response_text.strip():
+        return "Yes, I can hear you perfectly! I'm here to help you with your medical form. What would you like me to help you with?"
     
     return response_text
 

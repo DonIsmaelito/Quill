@@ -35,6 +35,8 @@ const ChatInput = ({
   const tooltip2Timer = useRef<NodeJS.Timeout | null>(null);
 
   // Voice-agent state --------------------------------------------------
+  // Performance optimizations for low latency:
+  // - 1.5s silence detection (vs 3s) for faster response
   const [isRecording, setIsRecording] = useState(false);
   const [isConversationActive, setIsConversationActive] = useState(false);
   const [conversationState, setConversationState] = useState<
@@ -67,11 +69,11 @@ const ChatInput = ({
       if (audioLevel < silenceThreshold) {
         // Start silence timer if not already started
         if (!silenceTimeoutRef.current) {
-          console.log("🔇 Silence detected, starting 3-second timer");
+          console.log("🔇 Silence detected, starting 1.5-second timer");
           silenceTimeoutRef.current = setTimeout(() => {
-            console.log("⏰ 3 seconds of silence - auto-stopping recording");
+            console.log("⏰ 1.5 seconds of silence - auto-stopping recording");
             stopRecording();
-          }, 3000); // 3 seconds of silence
+          }, 1500); // 1.5 seconds of silence for faster response
         }
       } else {
         // Reset silence timer if user is speaking
@@ -159,14 +161,14 @@ const ChatInput = ({
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType,
-        audioBitsPerSecond: 128000, // 128 kbps for good quality
+        audioBitsPerSecond: 128000,
       });
       mediaRecorderRef.current = mediaRecorder;
 
       let audioChunks = [];
 
       mediaRecorder.ondataavailable = (event) => {
-        console.log("📦 Audio data available:", event.data.size, "bytes");
+        console.log("Audio data available:", event.data.size, "bytes");
         if (event.data.size > 0) {
           audioChunks.push(event.data);
         }
@@ -185,11 +187,7 @@ const ChatInput = ({
         if (audioChunks.length > 0 && ws.readyState === WebSocket.OPEN) {
           // Combine all chunks into a single blob
           const audioBlob = new Blob(audioChunks, { type: mimeType });
-          console.log(
-            "Sending combined audio blob:",
-            audioBlob.size,
-            "bytes"
-          );
+          console.log("Sending combined audio blob:", audioBlob.size, "bytes");
 
           if (audioBlob.size > 1000) {
             // Only send if substantial
@@ -198,11 +196,11 @@ const ChatInput = ({
             setTimeout(() => {
               if (ws.readyState === WebSocket.OPEN) {
                 ws.send("END");
-                console.log("📤 Sent END signal");
+                console.log("Sent END signal");
               }
             }, 100);
           } else {
-            console.warn("⚠️ Audio too small, not sending");
+            console.warn("Audio too small, not sending");
             ws.send("END"); // Still send END to reset state
           }
         }
@@ -264,7 +262,7 @@ const ChatInput = ({
             });
           }
           mediaRecorderRef.current = null;
-          console.log("🧹 MediaRecorder cleaned up");
+          console.log("MediaRecorder cleaned up");
         }
       }, 500); // Longer delay to ensure stop event completes
     }
@@ -421,13 +419,26 @@ const ChatInput = ({
           alert("Voice processing error: " + msg.content);
         }
       } else if (ev.data instanceof Blob) {
-        console.log("Audio blob received:", ev.data.size, "bytes");
-        const url = URL.createObjectURL(ev.data);
-        const audio = new Audio(url);
+        console.log(
+          "Audio blob received:",
+          ev.data.size,
+          "bytes",
+          "type:",
+          ev.data.type
+        );
+        const audioBlob = URL.createObjectURL(ev.data);
+        const audio = new Audio(audioBlob);
+
+        // Add better error handling and debugging
+        audio.onerror = (e) => {
+          console.error("Audio error event:", e);
+          console.error("Audio error details:", audio.error);
+        };
 
         // When audio finishes playing, automatically start listening again if in conversation mode
         audio.onended = () => {
           console.log("Audio playback finished");
+          URL.revokeObjectURL(audioBlob); // Clean up object URL
           if (isConversationActive && shouldAutoListen.current) {
             console.log("Auto-starting next recording...");
             setTimeout(() => {
@@ -440,9 +451,12 @@ const ChatInput = ({
 
         audio
           .play()
-          .then(() => console.log("Audio playback started"))
+          .then(() => console.log("Audio playback started successfully"))
           .catch((err) => {
             console.error("Audio playback error:", err);
+            console.error("Audio source:", audioBlob);
+            console.error("Audio readyState:", audio.readyState);
+            console.error("Audio networkState:", audio.networkState);
             // If audio fails, still continue conversation
             if (isConversationActive && shouldAutoListen.current) {
               setTimeout(() => {
@@ -453,18 +467,21 @@ const ChatInput = ({
             }
           });
       } else if (ev.data instanceof ArrayBuffer) {
-        console.log(
-          "Audio ArrayBuffer received:",
-          ev.data.byteLength,
-          "bytes"
-        );
-        const blob = new Blob([ev.data], { type: "audio/wav" });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
+        console.log("Audio ArrayBuffer received:", ev.data.byteLength, "bytes");
+        const audioBuffer = new Blob([ev.data], { type: "audio/mpeg" });
+        const audioUrl = URL.createObjectURL(audioBuffer);
+        const audio = new Audio(audioUrl);
+
+        // Add better error handling and debugging
+        audio.onerror = (e) => {
+          console.error("Audio error event:", e);
+          console.error("Audio error details:", audio.error);
+        };
 
         // When audio finishes playing, automatically start listening again if in conversation mode
         audio.onended = () => {
           console.log("Audio playback finished");
+          URL.revokeObjectURL(audioUrl); // Clean up object URL
           if (isConversationActive && shouldAutoListen.current) {
             console.log("Auto-starting next recording...");
             setTimeout(() => {
@@ -477,9 +494,12 @@ const ChatInput = ({
 
         audio
           .play()
-          .then(() => console.log("Audio playback started"))
+          .then(() => console.log("Audio playback started successfully"))
           .catch((err) => {
             console.error("Audio playback error:", err);
+            console.error("Audio source:", audioUrl);
+            console.error("Audio readyState:", audio.readyState);
+            console.error("Audio networkState:", audio.networkState);
             // If audio fails, still continue conversation
             if (isConversationActive && shouldAutoListen.current) {
               setTimeout(() => {

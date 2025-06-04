@@ -45,6 +45,13 @@
             "required": true
         },
         {
+            "id": "SSN",
+            "label": "Social Security Number",
+            "type": "text",
+            "placeholder": "Enter your Social Security Number",
+            "required": true
+        },
+        {
             "id": "phone",
             "label": "Phone Number",
             "type": "text",

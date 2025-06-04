@@ -512,6 +512,8 @@ export function AssistantPanel({
   };
 
   // Voice agent ---------------------------------------------------------
+  // Performance optimizations for low latency:
+  // - 1.5s silence detection (vs 3s) for faster response
   const [isRecording, setIsRecording] = useState(false);
   const [isConversationActive, setIsConversationActive] = useState(false);
   const [conversationState, setConversationState] = useState<
@@ -544,16 +546,16 @@ export function AssistantPanel({
       if (audioLevel < silenceThreshold) {
         // Start silence timer if not already started
         if (!silenceTimeoutRef.current) {
-          console.log("Silence detected, starting 3-second timer");
+          console.log("🔇 Silence detected, starting 1.5-second timer");
           silenceTimeoutRef.current = setTimeout(() => {
-            console.log("3 seconds of silence - auto-stopping recording");
+            console.log("⏰ 1.5 seconds of silence - auto-stopping recording");
             stopRecording();
-          }, 3000); // 3 seconds of silence
+          }, 1500); // 1.5 seconds of silence for faster response
         }
       } else {
         // Reset silence timer if user is speaking
         if (silenceTimeoutRef.current) {
-          console.log("Speech detected - resetting silence timer");
+          console.log("🗣️ Speech detected - resetting silence timer");
           clearTimeout(silenceTimeoutRef.current);
           silenceTimeoutRef.current = null;
         }
@@ -690,13 +692,44 @@ export function AssistantPanel({
           alert("Voice processing error: " + msg.content);
         }
       } else if (ev.data instanceof Blob) {
-        console.log("Audio blob received:", ev.data.size, "bytes");
-        const url = URL.createObjectURL(ev.data);
-        const audio = new Audio(url);
+        console.log(
+          "Audio blob received:",
+          ev.data.size,
+          "bytes",
+          "type:",
+          ev.data.type
+        );
+        const audioBlob = URL.createObjectURL(ev.data);
+        const audio = new Audio(audioBlob);
+
+        // Enhanced debugging for audio playback
+        console.log("🔊 Creating Audio element for Blob");
+        console.log("🔊 Audio can play MP3:", audio.canPlayType("audio/mpeg"));
+        console.log("🔊 Audio can play MP4:", audio.canPlayType("audio/mp4"));
+        console.log("🔊 Audio volume:", audio.volume);
+        console.log("🔊 Audio muted:", audio.muted);
+
+        // Set volume to maximum and ensure not muted
+        audio.volume = 1.0;
+        audio.muted = false;
+
+        // Add better error handling and debugging
+        audio.onerror = (e) => {
+          console.error("🔊 Audio error event:", e);
+          console.error("🔊 Audio error details:", audio.error);
+          console.error("🔊 Audio error code:", audio.error?.code);
+          console.error("🔊 Audio error message:", audio.error?.message);
+        };
+
+        audio.onloadstart = () => console.log("🔊 Audio load started");
+        audio.onloadeddata = () => console.log("🔊 Audio data loaded");
+        audio.oncanplay = () => console.log("🔊 Audio can play");
+        audio.oncanplaythrough = () => console.log("🔊 Audio can play through");
 
         // When audio finishes playing, automatically start listening again if in conversation mode
         audio.onended = () => {
-          console.log("Audio playback finished");
+          console.log("🔊 Audio playback finished");
+          URL.revokeObjectURL(audioBlob); // Clean up object URL
           if (isConversationActive && shouldAutoListen.current) {
             console.log("Auto-starting next recording...");
             setTimeout(() => {
@@ -707,11 +740,39 @@ export function AssistantPanel({
           }
         };
 
+        console.log("🔊 Starting audio playback...");
         audio
           .play()
-          .then(() => console.log("Audio playback started"))
+          .then(() => {
+            console.log("🔊 Audio playback started successfully");
+            console.log("🔊 Audio current time:", audio.currentTime);
+            console.log("🔊 Audio duration:", audio.duration);
+            console.log("🔊 Audio paused:", audio.paused);
+          })
           .catch((err) => {
-            console.error("Audio playback error:", err);
+            console.error("🔊 Audio playback error:", err);
+            console.error("🔊 Error name:", err.name);
+            console.error("🔊 Error message:", err.message);
+            console.error("🔊 Audio source:", audioBlob);
+            console.error("🔊 Audio readyState:", audio.readyState);
+            console.error("🔊 Audio networkState:", audio.networkState);
+            console.error("🔊 Audio buffered ranges:", audio.buffered.length);
+
+            // Try to provide helpful error messages
+            if (err.name === "NotAllowedError") {
+              console.error(
+                "🔊 Browser blocked audio playback - user interaction may be required"
+              );
+              alert(
+                "Audio playback was blocked by the browser. Please click somewhere on the page to enable audio."
+              );
+            } else if (err.name === "NotSupportedError") {
+              console.error("🔊 Audio format not supported by browser");
+              alert(
+                "Your browser doesn't support the audio format. Please try a different browser."
+              );
+            }
+
             // If audio fails, still continue conversation
             if (isConversationActive && shouldAutoListen.current) {
               setTimeout(() => {
@@ -722,18 +783,39 @@ export function AssistantPanel({
             }
           });
       } else if (ev.data instanceof ArrayBuffer) {
-        console.log(
-          "Audio ArrayBuffer received:",
-          ev.data.byteLength,
-          "bytes"
-        );
-        const blob = new Blob([ev.data], { type: "audio/wav" });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
+        console.log("Audio ArrayBuffer received:", ev.data.byteLength, "bytes");
+        const audioBuffer = new Blob([ev.data], { type: "audio/mpeg" });
+        const audioUrl = URL.createObjectURL(audioBuffer);
+        const audio = new Audio(audioUrl);
+
+        // Enhanced debugging for audio playback
+        console.log("🔊 Creating Audio element for ArrayBuffer");
+        console.log("🔊 Audio can play MP3:", audio.canPlayType("audio/mpeg"));
+        console.log("🔊 Audio can play MP4:", audio.canPlayType("audio/mp4"));
+        console.log("🔊 Audio volume:", audio.volume);
+        console.log("🔊 Audio muted:", audio.muted);
+
+        // Set volume to maximum and ensure not muted
+        audio.volume = 1.0;
+        audio.muted = false;
+
+        // Add better error handling and debugging
+        audio.onerror = (e) => {
+          console.error("🔊 Audio error event:", e);
+          console.error("🔊 Audio error details:", audio.error);
+          console.error("🔊 Audio error code:", audio.error?.code);
+          console.error("🔊 Audio error message:", audio.error?.message);
+        };
+
+        audio.onloadstart = () => console.log("🔊 Audio load started");
+        audio.onloadeddata = () => console.log("🔊 Audio data loaded");
+        audio.oncanplay = () => console.log("🔊 Audio can play");
+        audio.oncanplaythrough = () => console.log("🔊 Audio can play through");
 
         // When audio finishes playing, automatically start listening again if in conversation mode
         audio.onended = () => {
-          console.log("Audio playback finished");
+          console.log("🔊 Audio playback finished");
+          URL.revokeObjectURL(audioUrl); // Clean up object URL
           if (isConversationActive && shouldAutoListen.current) {
             console.log("Auto-starting next recording...");
             setTimeout(() => {
@@ -744,11 +826,39 @@ export function AssistantPanel({
           }
         };
 
+        console.log("🔊 Starting audio playback...");
         audio
           .play()
-          .then(() => console.log("Audio playback started"))
+          .then(() => {
+            console.log("🔊 Audio playback started successfully");
+            console.log("🔊 Audio current time:", audio.currentTime);
+            console.log("🔊 Audio duration:", audio.duration);
+            console.log("🔊 Audio paused:", audio.paused);
+          })
           .catch((err) => {
-            console.error("Audio playback error:", err);
+            console.error("🔊 Audio playback error:", err);
+            console.error("🔊 Error name:", err.name);
+            console.error("🔊 Error message:", err.message);
+            console.error("🔊 Audio source:", audioUrl);
+            console.error("🔊 Audio readyState:", audio.readyState);
+            console.error("🔊 Audio networkState:", audio.networkState);
+            console.error("🔊 Audio buffered ranges:", audio.buffered.length);
+
+            // Try to provide helpful error messages
+            if (err.name === "NotAllowedError") {
+              console.error(
+                "🔊 Browser blocked audio playback - user interaction may be required"
+              );
+              alert(
+                "Audio playback was blocked by the browser. Please click somewhere on the page to enable audio."
+              );
+            } else if (err.name === "NotSupportedError") {
+              console.error("🔊 Audio format not supported by browser");
+              alert(
+                "Your browser doesn't support the audio format. Please try a different browser."
+              );
+            }
+
             // If audio fails, still continue conversation
             if (isConversationActive && shouldAutoListen.current) {
               setTimeout(() => {
@@ -808,9 +918,7 @@ export function AssistantPanel({
       // Wait for WebSocket to be ready (with timeout)
       let attempts = 0;
       while (ws.readyState !== WebSocket.OPEN && attempts < 10) {
-        console.log(
-          `Waiting for WebSocket connection... (${ws.readyState})`
-        );
+        console.log(`Waiting for WebSocket connection... (${ws.readyState})`);
         await new Promise((resolve) => setTimeout(resolve, 100));
         attempts++;
       }
@@ -834,7 +942,7 @@ export function AssistantPanel({
           autoGainControl: true,
         },
       });
-      console.log("Got media stream");
+      console.log("📡 Got media stream");
 
       // Set up audio analysis for silence detection
       audioContextRef.current = new (window.AudioContext ||
@@ -859,11 +967,11 @@ export function AssistantPanel({
           break;
         }
       }
-      console.log("Using MIME type:", mimeType);
+      console.log("📹 Using MIME type:", mimeType);
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType,
-        audioBitsPerSecond: 128000, // 128 kbps for good quality
+        audioBitsPerSecond: 128000,
       });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -889,11 +997,7 @@ export function AssistantPanel({
         if (audioChunks.length > 0 && ws.readyState === WebSocket.OPEN) {
           // Combine all chunks into a single blob
           const audioBlob = new Blob(audioChunks, { type: mimeType });
-          console.log(
-            "Sending combined audio blob:",
-            audioBlob.size,
-            "bytes"
-          );
+          console.log("Sending combined audio blob:", audioBlob.size, "bytes");
 
           if (audioBlob.size > 1000) {
             // Only send if substantial

@@ -5,16 +5,6 @@ from typing import Optional
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
 
-# ---------------------------------------------------------------------------
-# ElevenLabs helper – thin wrapper around the official SDK                   
-# ---------------------------------------------------------------------------
-# This module exposes two synchronous utilities:
-#   1. transcribe(audio_bytes) -> str   (Speech-to-Text)
-#   2. synthesize(text) -> bytes        (Text-to-Speech)
-# Both rely on an ELEVENLABS_API_KEY environment variable that should be
-# defined in the project's .env file.
-# ---------------------------------------------------------------------------
-
 # Load .env file from the voice_agent directory
 import pathlib
 current_dir = pathlib.Path(__file__).parent
@@ -49,7 +39,7 @@ def transcribe(audio_bytes: bytes) -> str:
         return "[No speech detected]"
     
     # Validate audio data size
-    if len(audio_bytes) < 1000:  # Less than 1KB is probably too short
+    if len(audio_bytes) < 1000: 
         return "[No speech detected]"
     
     # Create a file-like object with proper filename and content type
