@@ -14,7 +14,7 @@ from langchain_core.documents import Document
 import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ from typing import Optional, Dict, List, Any
 import base64
 from dotenv import load_dotenv
 from openai import OpenAI
+from starlette.websockets import WebSocketState
 
 load_dotenv()
 
@@ -57,7 +58,7 @@ app = FastAPI(title="Quill RAG API", description="API for Quill RAG functionalit
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -968,6 +969,266 @@ async def get_user_info():
     except Exception as e:
         logging.error(f"Error getting user info: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get user info: {str(e)}")
+
+# --- Voice agent helper ----------------------------------------------------
+try:
+    # Local import to avoid circular deps if voice module imports FastAPI
+    from ..voice_agent import voice as voice_helper  # type: ignore
+except Exception:
+    # Fallback when running directly ("python quill_api_server_new.py")
+    import importlib, pathlib, sys
+
+    voice_module_path = pathlib.Path(__file__).resolve().parents[1] / "voice_agent"
+    if str(voice_module_path) not in sys.path:
+        sys.path.append(str(voice_module_path))
+    voice_helper = importlib.import_module("voice")
+
+# ---------------------------------------------------------------------------
+# Simple Python port of isUpdateRequest (mirrors logic in Next.js route.ts)
+# ---------------------------------------------------------------------------
+
+def is_update_request_py(message: str) -> bool:
+    lower_message = message.lower()
+    update_keywords = [
+        "update",
+        "change",
+        "modify",
+        "correct",
+        "fix",
+        "edit",
+        "wrong",
+        "incorrect",
+        "mistake",
+        "error",
+        "not right",
+        "is not",
+        "instead of",
+        "should be",
+        "actually",
+        "instead",
+        "my real",
+        "my actual",
+        "my correct",
+        "add",
+        "remove",
+    ]
+
+    info_types = [
+        "name",
+        "address",
+        "phone",
+        "email",
+        "number",
+        "info",
+        "information",
+        "birth",
+        "date",
+        "ssn",
+        "social",
+        "id",
+        "identifier",
+        "password",
+        "contact",
+        "details",
+        "data",
+        "profile",
+        "record",
+    ]
+
+    for kw in update_keywords:
+        if f" {kw} " in lower_message:
+            for info in info_types:
+                if info in lower_message:
+                    return True
+            if kw in {"update", "change", "modify", "fix", "correct"}:
+                return True
+
+    if "not" in lower_message and "but" in lower_message:
+        return True
+    if any(phrase in lower_message for phrase in ["it's", "its", "should be", "is actually"]):
+        return True
+
+    return False
+
+# ---------------------------------------------------------------------------
+# WebSocket endpoint for bi-directional voice communication
+# ---------------------------------------------------------------------------
+
+@app.websocket("/voice_ws")
+async def voice_ws(websocket: WebSocket):
+    """Handle voice chat: receive audio, return assistant reply + TTS audio."""
+
+    await websocket.accept()
+
+    # Conversation memory (mirrors UI chat) – list of {type, content}
+    conversation = []  # type: list[dict[str, str]]
+
+    audio_chunks: list[bytes] = []
+    
+    # Store form fields for context (will be sent by frontend)
+    current_form_fields = None
+
+    try:
+        while True:
+            msg = await websocket.receive()
+
+            # Binary frame – append to buffer
+            if "bytes" in msg and msg["bytes"] is not None:
+                audio_data = msg["bytes"]
+                logging.debug("voice_ws: received %d audio bytes", len(audio_data))
+                
+                # For the new single-blob approach, we expect larger chunks
+                if len(audio_data) > 1000:  # Substantial audio data
+                    audio_chunks = [audio_data]  # Replace any previous chunks
+                    logging.debug("voice_ws: received substantial audio blob")
+                else:
+                    audio_chunks.append(audio_data)
+                continue
+
+            # Text frame acts as control; expect "END" to delimit utterance
+            if "text" in msg and msg["text"]:
+                text_msg = msg["text"].strip()
+                
+                # Check for form fields update
+                if text_msg.startswith("FORM_FIELDS:"):
+                    try:
+                        form_fields_json = text_msg[12:]  # Remove "FORM_FIELDS:" prefix
+                        current_form_fields = form_fields_json
+                        logging.debug("voice_ws: received form fields update")
+                        continue
+                    except Exception as e:
+                        logging.error("voice_ws: error parsing form fields: %s", e)
+                        continue
+                
+                if text_msg.upper() != "END":
+                    # Ignore other control messages for now
+                    continue
+
+                # We have full audio → run ASR
+                if not audio_chunks:
+                    await websocket.send_json({"type": "error", "content": "No audio received"})
+                    continue
+
+                logging.debug("voice_ws: END received – processing %d audio chunks", len(audio_chunks))
+                audio_bytes = b"".join(audio_chunks)
+                audio_chunks = []  # reset for next utterance
+
+                # Validate audio data
+                if len(audio_bytes) < 1000:  # Less than 1KB is probably too short
+                    logging.warning("voice_ws: audio data too short (%d bytes), skipping", len(audio_bytes))
+                    await websocket.send_json({"type": "error", "content": "Audio recording too short. Please try speaking for longer."})
+                    continue
+
+                # Additional validation - check for reasonable audio size (not too large either)
+                if len(audio_bytes) > 50 * 1024 * 1024:  # 50MB max
+                    logging.warning("voice_ws: audio data too large (%d bytes), skipping", len(audio_bytes))
+                    await websocket.send_json({"type": "error", "content": "Audio recording too large. Please try a shorter recording."})
+                    continue
+
+                logging.debug("voice_ws: running ASR on %d bytes", len(audio_bytes))
+                # Speech-to-Text
+                try:
+                    transcript = voice_helper.transcribe(audio_bytes)
+                    logging.info("voice_ws: transcript='%s'", transcript)
+                    
+                    # Check if transcription failed or is empty
+                    if not transcript or transcript.strip() in ["[No speech detected]", "[Transcription failed", ""] or transcript.startswith("[Transcription failed"):
+                        logging.warning("voice_ws: transcription failed or empty")
+                        await websocket.send_json({"type": "error", "content": "Could not understand the audio. Please try speaking more clearly."})
+                        continue
+                        
+                except Exception as e:
+                    logging.error("voice_ws: ASR exception: %s", e)
+                    await websocket.send_json({"type": "error", "content": f"ASR failed: {e}"})
+                    continue
+
+                # Append user message to conv memory (server-side only)
+                conversation.append({"type": "user", "content": transcript})
+
+                # Determine intent & call existing endpoints directly (function)
+                is_update = is_update_request_py(transcript)
+
+                try:
+                    logging.debug("voice_ws: calling answer_query (update=%s)", is_update)
+                    reply_text = answer_query(
+                        None,
+                        transcript,
+                        user_info=load_user_info(),
+                        chat_history="\n".join([f"{m['type']}: {m['content']}" for m in conversation]),
+                        form_fields=current_form_fields,  # Include form fields for context
+                    )
+                except Exception as e:
+                    await websocket.send_json({"type": "error", "content": f"LLM error: {e}"})
+                    continue
+
+                # Add assistant message to conv memory
+                conversation.append({"type": "assistant", "content": reply_text})
+
+                # Clean the response for TTS (remove field update JSON)
+                cleaned_reply_text = clean_response_for_voice(reply_text)
+
+                # TTS
+                logging.debug("voice_ws: synthesizing TTS for reply (len=%d chars)", len(cleaned_reply_text))
+                try:
+                    logging.info("voice_ws: calling TTS synthesis...")
+                    audio_reply = voice_helper.synthesize(cleaned_reply_text)
+                    logging.info("voice_ws: TTS synthesis completed, got %d bytes", len(audio_reply))
+                except Exception as e:
+                    logging.error("voice_ws: TTS synthesis failed: %s", e)
+                    await websocket.send_json({"type": "error", "content": f"TTS failed: {e}"})
+                    continue
+
+                # Stream assistant text as JSON, then TTS audio
+                response_json = json.dumps({
+                    "type": "assistant_text",
+                    "content": reply_text,  # Send full response with JSON for frontend processing
+                })
+                logging.debug("voice_ws: sending assistant text JSON")
+                await websocket.send_text(response_json)
+                logging.debug("voice_ws: assistant text sent, now streaming audio (%d bytes)", len(audio_reply))
+                # Send audio bytes
+                logging.info("voice_ws: sending audio bytes to client...")
+                await websocket.send_bytes(audio_reply)
+                logging.info("voice_ws: audio bytes sent successfully")
+
+    except WebSocketDisconnect:
+        # Clean disconnect
+        logging.info("voice_ws: WebSocket disconnected cleanly")
+    except Exception as e:
+        logging.error("voice_ws: Unexpected error: %s", e)
+        # Only try to send error if connection is still open
+        try:
+            if websocket.application_state == WebSocketState.CONNECTED:
+                await websocket.send_json({"type": "error", "content": "Voice processing error occurred"})
+        except Exception as send_error:
+            logging.error("voice_ws: Failed to send error message: %s", send_error)
+        
+        # Try to close connection gracefully
+        try:
+            if websocket.application_state not in [WebSocketState.DISCONNECTED, WebSocketState.DISCONNECTING]:
+                await websocket.close()
+        except Exception as close_error:
+            logging.error("voice_ws: Failed to close WebSocket: %s", close_error)
+
+def clean_response_for_voice(response_text: str) -> str:
+    """
+    Remove field update JSON from response text before TTS synthesis.
+    This ensures the voice agent doesn't read out the JSON field updates.
+    """
+    # Extract field updates JSON (same regex as frontend)
+    field_updates_match = re.search(r'\{[\'"]field_updates[\'"]:\s*\[.*?\]\}', response_text)
+    
+    if field_updates_match:
+        # Remove the field updates JSON from the response
+        cleaned_response = response_text.replace(field_updates_match.group(0), "").strip()
+        
+        # Clean up any redundant text that might be left
+        cleaned_response = re.sub(r'\s*Based on the information I have, I was able to fill out some of the form for you!\s*', '', cleaned_response)
+        cleaned_response = re.sub(r'\s*Here\'s the updated information:\s*', '', cleaned_response)
+        
+        return cleaned_response
+    
+    return response_text
 
 if __name__ == "__main__":
     # Create required directories

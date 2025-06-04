@@ -19,3 +19,23 @@ temp/
 .vscode/
 .idea/
 *.log
+
+# ─── Environment variables & secrets ──────────────────────
+.env
+.env.*
+**/.env
+**/.env.*
+*.env
+src/**/.env
+src/**/.env.*
+.env.local
+.env.development
+.env.production
+.env.test
+
+# ─── API Keys & Credentials ───────────────────────────────
+config/secrets/
+**/*secret*
+**/*key*
+**/*token*
+credentials.json
