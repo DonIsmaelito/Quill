@@ -406,7 +406,7 @@ def create_retriever(vector_db):
         logging.error(f"Error creating retriever: {e}")
         return None
 
-def answer_query(llm, question, user_info="", chat_history="", new_form=None, form_fields=None):
+def answer_query(llm, question, user_info="", chat_history="", new_form=None, form_fields=None, allow_field_updates: bool = True):
     """
     Answer a query using stored data and vector DBs of uploaded forms.
     """
@@ -458,7 +458,7 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
         
         prompt_text = template
     else:
-        prompt_text = (
+        base_prompt = (
             "You are a friendly and helpful medical administrative assistant at a clinic. Your role is to help patients understand and complete their medical forms.\n\n"
             "PATIENT INFORMATION:\n{user_info}\n\n"
             "CHAT HISTORY:\n{chat_history}\n\n"
@@ -470,20 +470,34 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "4. If unsure, offer to help find the information\n"
             "5. Always maintain patient privacy and confidentiality\n"
             "6. If asked about information not in our records, suggest relevant documents they can provide\n"
+        )
+
+        update_instructions = (
             "7. IMPORTANT: If you can determine values for ANY form fields based on the conversation and the PATIENT INFORMATION that currently have a value of MISSING, include AS MANY of them as possible in a well-formed JSON object at the end of your response with the format:\n"
             "   {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
             "   For example:\n"
             "   Based on the information I have, I was able to fill out some of the form for you!"
             "   {{'field_updates': [{{'id': 'patientName', 'value': 'John Markovich'}}, {{'id': 'email', 'value': 'jm23@gmail.com'}}]}}\n"
-            "   ONLY provide field_updates for fields that are in the CURRENT MEDICAL FORM FIELDS AND VALUES and have a value of MISSING. Use the associated IDs. Only choose from the IDs in the existing form fields, not the patient info ones.\n"
-            "   Only update field values if you have the actual new value. Don't use place-holders.\n"
+            "   Provide field_updates for any field the patient explicitly asked to fill or change, OR for fields that are currently marked MISSING and for which you have reliable information.  Use the associated IDs.\n"
+            "   Only update field values if you have the actual new value. Don't use placeholders.\n"
+            "   Do NOT include any field in field_updates if you don't have actual data for it.\n"
+            "   Do NOT include fields with values like 'MISSING', 'unknown', 'N/A', or placeholders.\n"
             "   Do NOT ask the patient to confirm this information in the chat. Just provide the new values in the JSON object at the end with its 'field_updates' key as specified.\n"
-            "   Do NOT reference this JSON object in the chat, just print it out as specified above. It will be filtered out before shown to the user.\n"
+            "   Do NOT reference this JSON object in the chat, just print it out as specified above. It will be filtered out later.\n"
             "   Also, the field from the PATIENT INFORMATION doesn't have to be exactly the same as the field in the form. You can use the PATIENT INFORMATION to determine the new value for the form field.\n"
             "   NEVER return any sort of JSON back to the user as evidence of your answer. ONLY return the JSON object at the end if you have new values to provide, as this will be filtered out later.\n\n"
-            "QUESTION: {question}\n\n"
-            "Remember to provide the answer in this format all in one line: {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
-        ).format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question)
+        )
+
+        prompt_text = base_prompt
+        if allow_field_updates:
+            prompt_text += update_instructions
+
+        prompt_text += "QUESTION: {question}\n\n"
+
+        if allow_field_updates:
+            prompt_text += "Remember to provide the answer in this format all in one line: {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
+
+        prompt_text = prompt_text.format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question)
     
     
     logging.info(f"Prompt text: {prompt_text}")
@@ -630,6 +644,33 @@ YOUR MAPPING OUTPUT:
         logging.error(f"Error in field mapping: {e}")
         # Fallback to simple merge in case of errors
         return {**current_info, **new_info}
+
+def update_user_info_from_doc_fast(file_path, current_info: dict):
+    """
+    Fast version of update_user_info_from_doc that skips vector database creation.
+    Used for voice uploads where we only need user info extraction for immediate auto-fill.
+    """
+    data = ingest_file(file_path)
+    if data is None:
+        logging.error(f"Failed to ingest document from {file_path}")
+        return current_info
+        
+    chunks = split_documents(data)
+    new_info = extract_key_value_info(chunks, None, None)  # Skip LLM for speed
+    logging.info(f"New info extracted from document: {new_info}")
+    
+    # Flatten the new info before merging
+    flat_new_info = flatten_json(new_info)
+    logging.info(f"Flattened new info: {flat_new_info}")
+    
+    # Simple merge without LLM (faster)
+    merged = {**current_info, **flat_new_info}
+    update_user_info_json(merged)
+    
+    # Skip vector DB creation for speed
+    logging.info("Skipped vector DB creation for fast voice upload")
+    
+    return merged
 
 def update_user_info_from_doc(file_path, llm, current_info: dict):
     """
@@ -782,16 +823,24 @@ async def query_endpoint(
                 user_info=user_info, 
                 chat_history=chat_history_formatted,
                 new_form=data,
-                form_fields=formFields
+                form_fields=formFields,
+                allow_field_updates=True  # always allow when a PDF form is provided
             )
         else:
             # Answer without document
+            explanation_only = is_field_explanation_request_py(message)
+            allow_updates = (
+                is_update_request_py(message)
+                or is_auto_fill_request_py(message)
+            ) and not explanation_only
+
             response = answer_query(
-                None, 
-                message, 
-                user_info=user_info, 
+                None,
+                message,
+                user_info=user_info,
                 chat_history=chat_history_formatted,
-                form_fields=formFields
+                form_fields=formFields,
+                allow_field_updates=allow_updates,
             )
         
         return {"content": response}
@@ -973,20 +1022,14 @@ async def get_user_info():
 
 # --- Voice agent helper ----------------------------------------------------
 try:
-    # Local import to avoid circular deps if voice module imports FastAPI
-    from ..voice_agent import voice as voice_helper  # type: ignore
+    from ..voice_agent import voice as voice_helper
 except Exception:
-    # Fallback when running directly ("python quill_api_server_new.py")
     import importlib, pathlib, sys
 
     voice_module_path = pathlib.Path(__file__).resolve().parents[1] / "voice_agent"
     if str(voice_module_path) not in sys.path:
         sys.path.append(str(voice_module_path))
     voice_helper = importlib.import_module("voice")
-
-# ---------------------------------------------------------------------------
-# Simple Python port of isUpdateRequest (mirrors logic in Next.js route.ts)
-# ---------------------------------------------------------------------------
 
 def is_update_request_py(message: str) -> bool:
     lower_message = message.lower()
@@ -1051,9 +1094,106 @@ def is_update_request_py(message: str) -> bool:
 
     return False
 
+def is_field_explanation_request_py(message: str) -> bool:
+    lower = message.lower().strip()
+
+    # Must look like a question about a field
+    if "?" not in lower:
+        return False
+
+    explanation_phrases = [
+        "what does", "what is", "explain", "meaning of", "entail", "stand for",
+        "how do i fill", "how to fill", "instructions for", "what should i put",
+    ]
+    return any(phrase in lower for phrase in explanation_phrases)
+
+
+def is_auto_fill_request_py(message: str) -> bool:
+    """Return True if the user asks the assistant to fill / complete the form."""
+    lower = message.lower()
+    fill_patterns = [
+        "fill out", "fill in", "fill the form", "complete the form", "auto fill", "autofill",
+        "populate the form", "enter the information", "add the information",
+    ]
+    return any(pat in lower for pat in fill_patterns)
+
 # ---------------------------------------------------------------------------
 # WebSocket endpoint for bi-directional voice communication
 # ---------------------------------------------------------------------------
+
+async def handle_voice_file_upload(upload_request: dict) -> dict:
+    """
+    Handle voice-controlled file upload requests.
+    Returns dict with success status, message, and file_path if successful.
+    """
+    try:
+        # Start with default location if none specified
+        search_locations = []
+        if upload_request.get("file_location"):
+            search_locations.append(upload_request["file_location"])
+        
+        # Add common locations as fallback
+        search_locations.extend([
+            "~/Desktop", "~/Downloads", "~/Documents", 
+            ".", "./uploads"  # Current directory and uploads folder
+        ])
+        
+        # Search for PDF files
+        found_files = []
+        for location in search_locations:
+            pdf_files = voice_helper.find_pdf_files(location, upload_request.get("doc_type"))
+            found_files.extend(pdf_files)
+        
+        if not found_files:
+            locations_str = ", ".join([loc.replace("~/", "your ") for loc in search_locations[:3]])
+            return {
+                "success": False,
+                "message": f"I couldn't find any PDF files in {locations_str}. Please make sure the file exists and try again."
+            }
+        
+        # Select the best match
+        selected_file = voice_helper.select_best_pdf_match(found_files, upload_request)
+        
+        if not selected_file:
+            return {
+                "success": False,
+                "message": "I found some PDF files but couldn't determine which one you meant. Please be more specific."
+            }
+        
+        # Copy the file to uploads directory
+        import shutil
+        filename = os.path.basename(selected_file)
+        destination_path = os.path.join(UPLOADS_DIR, filename)
+        
+        # Ensure uploads directory exists
+        os.makedirs(UPLOADS_DIR, exist_ok=True)
+        
+        # Copy the file
+        shutil.copy2(selected_file, destination_path)
+        
+        # Generate response message
+        doc_type_str = upload_request.get("doc_type", "document")
+        location_str = upload_request.get("file_location", "") or ""
+        
+        if location_str:
+            location_str = location_str.replace("~/", "your ")
+            message = f"I found and uploaded the {doc_type_str} '{filename}' from {location_str}."
+        else:
+            message = f"I found and uploaded the {doc_type_str} '{filename}'."
+        
+        return {
+            "success": True,
+            "message": message,
+            "file_path": destination_path,
+            "filename": filename
+        }
+        
+    except Exception as e:
+        logging.error(f"Voice file upload error: {e}")
+        return {
+            "success": False,
+            "message": f"I encountered an error while trying to upload the file: {str(e)}"
+        }
 
 @app.websocket("/voice_ws")
 async def voice_ws(websocket: WebSocket):
@@ -1146,21 +1286,95 @@ async def voice_ws(websocket: WebSocket):
                 # Append user message to conv memory (server-side only)
                 conversation.append({"type": "user", "content": transcript})
 
-                # Determine intent & call existing endpoints directly (function)
-                is_update = is_update_request_py(transcript)
+                # Check if this is a file upload request
+                upload_request = voice_helper.detect_file_upload_request(transcript)
+                
+                if upload_request["is_upload_request"]:
+                    # Handle voice-controlled file upload
+                    try:
+                        upload_result = await handle_voice_file_upload(upload_request)
+                        
+                        if upload_result["success"]:
+                            # File uploaded successfully - provide feedback
+                            reply_text = upload_result["message"]
+                            
+                            # Process the uploaded file through existing RAG pipeline
+                            file_path = upload_result["file_path"]
+                            filename = os.path.basename(file_path)
+                            
+                            # Ingest the file into the RAG system
+                            data = ingest_file(file_path)
+                            
+                            if data:
+                                reply_text += f" The document has been processed and is now available for questions. You can ask me about the contents of {filename}."
+                                
+                                # Update user info from the document (faster than vector DB)
+                                try:
+                                    current_info = load_user_info() or {}
+                                    updated_info = update_user_info_from_doc_fast(file_path, current_info)
+                                    if updated_info != current_info:
+                                        reply_text += " I've also updated your personal information based on the document contents."
+                                except Exception as e:
+                                    logging.warning(f"Could not update user info from uploaded document: {e}")
+                                
+                                # AUTO-FILL: Automatically try to fill form fields after successful upload
+                                if current_form_fields:
+                                    try:
+                                        auto_fill_message = "Fill out any form fields you can from the uploaded document. Only include fields you have actual data for - do NOT include fields with placeholder or missing values."
 
-                try:
-                    logging.debug("voice_ws: calling answer_query (update=%s)", is_update)
-                    reply_text = answer_query(
-                        None,
-                        transcript,
-                        user_info=load_user_info(),
-                        chat_history="\n".join([f"{m['type']}: {m['content']}" for m in conversation]),
-                        form_fields=current_form_fields,  # Include form fields for context
-                    )
-                except Exception as e:
-                    await websocket.send_json({"type": "error", "content": f"LLM error: {e}"})
-                    continue
+                                        # TODO: How do we figure out when to autofill? Because the user will never ask for it. They will expect it.
+                                        
+                                        auto_fill_response = answer_query(
+                                            None,
+                                            auto_fill_message,
+                                            user_info=load_user_info(),
+                                            chat_history="\n".join([f"{m['type']}: {m['content']}" for m in conversation]),
+                                            form_fields=current_form_fields,
+                                        )
+                                        
+                                        # Check if auto-fill response contains field updates
+                                        field_updates_match = re.search(r'\{[\'"]field_updates[\'"]:\s*\[[\s\S]*?\]\}', auto_fill_response)
+                                        if field_updates_match:
+                                            # Append the field updates to the main response so frontend can process them
+                                            reply_text += " " + field_updates_match.group(0)
+                                            logging.info(f"Voice upload: Auto-fill generated field updates: {field_updates_match.group(0)}")
+                                        
+                                    except Exception as e:
+                                        logging.warning(f"Voice upload auto-fill failed: {e}")
+                                
+                            else:
+                                reply_text += " However, there was an issue processing the document content. You may need to upload it again."
+                        else:
+                            # File upload failed
+                            reply_text = upload_result["message"]
+                            
+                    except Exception as e:
+                        logging.error(f"Voice file upload error: {e}")
+                        reply_text = f"I encountered an error while trying to upload the file: {str(e)}"
+                        
+                else:
+                    # Regular query processing (existing logic)
+                    # Determine intent & call existing endpoints directly (function)
+                    is_update = is_update_request_py(transcript)
+                    explanation_only = is_field_explanation_request_py(transcript)
+                    allow_updates = (
+                        is_update
+                        or is_auto_fill_request_py(transcript)
+                    ) and not explanation_only
+
+                    try:
+                        logging.debug("voice_ws: calling answer_query (update=%s)", is_update)
+                        reply_text = answer_query(
+                            None,
+                            transcript,
+                            user_info=load_user_info(),
+                            chat_history="\n".join([f"{m['type']}: {m['content']}" for m in conversation]),
+                            form_fields=current_form_fields,  # Include form fields for context
+                            allow_field_updates=allow_updates,
+                        )
+                    except Exception as e:
+                        await websocket.send_json({"type": "error", "content": f"LLM error: {e}"})
+                        continue
 
                 # Add assistant message to conv memory
                 conversation.append({"type": "assistant", "content": reply_text})
@@ -1219,7 +1433,7 @@ def clean_response_for_voice(response_text: str) -> str:
     This ensures the voice agent doesn't read out the JSON field updates.
     """
     # Extract field updates JSON (same regex as frontend)
-    field_updates_match = re.search(r'\{[\'"]field_updates[\'"]:\s*\[.*?\]\}', response_text)
+    field_updates_match = re.search(r'\{[\'"]field_updates[\'"]:\s*\[[\s\S]*?\]\}', response_text)
     
     if field_updates_match:
         # Remove the field updates JSON from the response
