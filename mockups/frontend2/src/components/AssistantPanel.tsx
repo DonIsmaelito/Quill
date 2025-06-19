@@ -3,10 +3,18 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { Card } from "./ui/card";
-import { Upload, Send, Loader2, Mic, AudioWaveform } from "lucide-react";
+import {
+  Upload,
+  Send,
+  Loader2,
+  Mic,
+  AudioWaveform,
+  Camera,
+} from "lucide-react";
 import { ragService } from "../services/ragService";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
+import { CameraCapture } from "./CameraCapture";
 
 // Not exactly the same as in Index.tsx
 interface FormField {
@@ -32,6 +40,7 @@ interface Message {
   content: string;
   type: "user" | "assistant";
   timestamp: Date;
+  imageUrl?: string; // Add optional image URL field
 }
 
 export function AssistantPanel({
@@ -47,6 +56,7 @@ export function AssistantPanel({
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -74,7 +84,8 @@ export function AssistantPanel({
     ragService.setWelcomeMessage(welcomeMessage);
   }, [formTitle, formFields]);
 
-  // Auto-fill form on initial load
+  // DISABLED: Auto-fill form on initial load (per user request to remove "refresh autofill" feature)
+  /*
   useEffect(() => {
     const autoFillForm = async () => {
       if (
@@ -195,6 +206,7 @@ export function AssistantPanel({
 
     autoFillForm();
   }, [formFields, onFieldsMentioned, onFieldsUpdated, isFormFieldsLoading]);
+  */
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -283,7 +295,7 @@ export function AssistantPanel({
 
       // Extract field updates from the response
       const fieldUpdatesMatch = response.match(
-        /\{['"]field_updates['"]:\s*\[.*?\]\}/
+        /\{['"]field_updates['"]:\s*\[[\s\S]*?\]\}/
       );
       let updatedFields: { id: string; value: string }[] = [];
       let displayResponse = response;
@@ -343,8 +355,15 @@ export function AssistantPanel({
           const field = formFields.find(
             (f) => f.id.toLowerCase() === update.id.toLowerCase()
           );
-          // Only include if field exists and value is different from current
-          return field && formValuesRef.current[field.id] !== update.value;
+          // Had MISSING in non filled fields here
+          // Only include if field exists, value is different from current, AND value is not "MISSING"
+          return (
+            field &&
+            formValuesRef.current[field.id] !== update.value &&
+            update.value !== "MISSING" &&
+            update.value !== "missing" &&
+            update.value?.toString().toUpperCase() !== "MISSING"
+          );
         });
 
         if (actualUpdates.length > 0) {
@@ -420,7 +439,7 @@ export function AssistantPanel({
 
       // Extract field updates from the response
       const fieldUpdatesMatch = response.match(
-        /\{['"]field_updates['"]:\s*\[.*?\]\}/
+        /\{['"]field_updates['"]:\s*\[[\s\S]*?\]\}/
       );
       let updatedFields: { id: string; value: string }[] = [];
       let displayResponse = response;
@@ -480,8 +499,14 @@ export function AssistantPanel({
           const field = formFields.find(
             (f) => f.id.toLowerCase() === update.id.toLowerCase()
           );
-          // Only include if field exists and value is different from current
-          return field && formValuesRef.current[field.id] !== update.value;
+          // Only include if field exists, value is different from current, AND value is not "MISSING"
+          return (
+            field &&
+            formValuesRef.current[field.id] !== update.value &&
+            update.value !== "MISSING" &&
+            update.value !== "missing" &&
+            update.value?.toString().toUpperCase() !== "MISSING"
+          );
         });
 
         if (actualUpdates.length > 0) {
@@ -509,6 +534,43 @@ export function AssistantPanel({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Camera capture functions -------------------------------------------
+  const handleCameraCapture = () => {
+    setIsCameraOpen(true);
+  };
+
+  const handleCameraImageCaptured = async (
+    imageFile: File,
+    imageUrl: string
+  ) => {
+    console.log("Camera image captured:", imageFile.name);
+
+    // Add user message with image
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: "📷 I've captured a form image",
+      type: "user",
+      timestamp: new Date(),
+      imageUrl: imageUrl,
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    // Add assistant response acknowledging the image
+    setTimeout(() => {
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content:
+          "Great! I can see the form you've captured. I have digitized the form and I can help you fill this out.",
+        type: "assistant",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    }, 500);
+
+    // Close the camera
+    setIsCameraOpen(false);
   };
 
   // Voice agent ---------------------------------------------------------
@@ -598,7 +660,7 @@ export function AssistantPanel({
 
           // Extract field updates from the response (same logic as regular chat)
           const fieldUpdatesMatch = responseContent.match(
-            /\{['"]field_updates['"]:\s*\[.*?\]\}/
+            /\{['"]field_updates['"]:\s*\[[\s\S]*?\]\}/
           );
           let updatedFields: { id: string; value: string }[] = [];
 
@@ -664,8 +726,14 @@ export function AssistantPanel({
               const field = formFields.find(
                 (f) => f.id.toLowerCase() === update.id.toLowerCase()
               );
-              // Only include if field exists and value is different from current
-              return field && formValuesRef.current[field.id] !== update.value;
+              // Only include if field exists, value is different from current, AND value is not "MISSING"
+              return (
+                field &&
+                formValuesRef.current[field.id] !== update.value &&
+                update.value !== "MISSING" &&
+                update.value !== "missing" &&
+                update.value?.toString().toUpperCase() !== "MISSING"
+              );
             });
 
             if (actualUpdates.length > 0) {
@@ -1080,6 +1148,34 @@ export function AssistantPanel({
 
   const startConversation = async () => {
     console.log("Starting conversation mode");
+
+    // Request audio permission and test playback first
+    try {
+      // Create a silent audio to unlock browser audio context
+      const audioContext = new (window.AudioContext ||
+        (window as any).webkitAudioContext)();
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+        console.log("🔊 Audio context resumed");
+      }
+
+      // Test audio playback with a silent sound
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      gainNode.gain.value = 0; // Silent
+      oscillator.frequency.value = 440;
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.01);
+      console.log("Audio permission unlocked");
+    } catch (error) {
+      console.error("Audio permission failed:", error);
+      alert(
+        "Audio playback permission needed. Please ensure audio is enabled."
+      );
+    }
+
     setIsConversationActive(true);
     shouldAutoListen.current = true;
     await startRecording();
@@ -1162,89 +1258,154 @@ export function AssistantPanel({
   };
 
   return (
-    <Card className="flex flex-col h-full">
-      <div className="p-4 border-b flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Assistant</h2>
-        <ThemeToggle />
-      </div>
+    <>
+      <Card className="flex flex-col h-full">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h2 className="text-lg font-semibold">Assistant</h2>
+          <ThemeToggle />
+        </div>
 
-      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-        <div className="space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.type === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
+        <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
+          <div className="space-y-4">
+            {messages.map((message) => (
               <div
-                className={`max-w-[80%] rounded-lg p-3 ${
-                  message.type === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                key={message.id}
+                className={`flex ${
+                  message.type === "user" ? "justify-end" : "justify-start"
                 }`}
               >
-                {message.content}
+                <div
+                  className={`max-w-[80%] rounded-lg p-3 ${
+                    message.type === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  }`}
+                >
+                  {/* Display image if present */}
+                  {message.imageUrl && (
+                    <div className="mb-2">
+                      <img
+                        src={message.imageUrl}
+                        alt="Captured form"
+                        className="max-w-full h-auto rounded-lg border border-border"
+                        style={{ maxHeight: "200px", objectFit: "contain" }}
+                      />
+                    </div>
+                  )}
+                  {/* Display text content */}
+                  <div>{message.content}</div>
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+        </ScrollArea>
+
+        <div className="p-6 border-t bg-gradient-to-r from-background to-muted/20">
+          {/* Action buttons row */}
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={handleFileUpload}
+              accept=".pdf,.jpg,.jpeg,.png"
+            />
+
+            {/* Upload Documents */}
+            <div className="group relative">
+              <Button
+                variant="ghost"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
+                className="h-12 px-4 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all duration-200 hover:scale-105 hover:shadow-md"
+              >
+                <Upload className="h-5 w-5 mr-2" />
+                <span className="text-sm font-medium">Upload</span>
+              </Button>
+              <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                Upload documents
               </div>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
 
-      <div className="p-4 border-t space-y-4">
-        <div className="flex items-center gap-2">
-          <Input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            multiple
-            onChange={handleFileUpload}
-            accept=".pdf,.jpg,.jpeg,.png"
-          />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isProcessing}
-            className="h-11 w-11"
-          >
-            <Upload className="h-5 w-5" />
-          </Button>
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message..."
-            onKeyPress={(e) => e.key === "Enter" && handleSendMessage(input)}
-            disabled={isProcessing}
-            className="h-11 text-[15px]"
-          />
-          <Button
-            size="icon"
-            onClick={() => handleSendMessage(input)}
-            disabled={isProcessing || !input.trim()}
-            className="h-11 w-11"
-          >
-            {isProcessing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleConversationToggle}
-            disabled={isProcessing}
-            className={`h-11 w-11 ${getConversationStatus().color}`}
-            title={getConversationStatus().text}
-          >
-            {React.createElement(getConversationStatus().icon, {
-              className: "h-5 w-5",
-            })}
-          </Button>
+            {/* Camera Scan */}
+            <div className="group relative">
+              <Button
+                variant="ghost"
+                onClick={handleCameraCapture}
+                disabled={isProcessing}
+                className="h-12 px-4 rounded-xl bg-green-50 hover:bg-green-100 dark:bg-green-950 dark:hover:bg-green-900 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800 transition-all duration-200 hover:scale-105 hover:shadow-md"
+              >
+                <Camera className="h-5 w-5 mr-2" />
+                <span className="text-sm font-medium">Scan</span>
+              </Button>
+              <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                Scan form with camera
+              </div>
+            </div>
+
+            {/* Voice Chat */}
+            <div className="group relative">
+              <Button
+                variant="ghost"
+                onClick={handleConversationToggle}
+                disabled={isProcessing}
+                className={`h-12 px-4 rounded-xl transition-all duration-200 hover:scale-105 hover:shadow-md ${
+                  isConversationActive
+                    ? "bg-red-50 hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800"
+                    : "bg-purple-50 hover:bg-purple-100 dark:bg-purple-950 dark:hover:bg-purple-900 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800"
+                }`}
+              >
+                {React.createElement(getConversationStatus().icon, {
+                  className: `h-5 w-5 mr-2 ${getConversationStatus().color}`,
+                })}
+                <span className="text-sm font-medium">
+                  {isConversationActive ? "Voice" : "Voice"}
+                </span>
+              </Button>
+              <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                {getConversationStatus().text}
+              </div>
+            </div>
+          </div>
+
+          {/* Input area */}
+          <div className="relative">
+            <div className="flex items-center bg-white dark:bg-gray-900 rounded-2xl border-2 border-gray-200 dark:border-gray-700 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200 shadow-sm hover:shadow-md">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask me anything about your form..."
+                onKeyPress={(e) =>
+                  e.key === "Enter" && handleSendMessage(input)
+                }
+                disabled={isProcessing}
+                className="border-0 bg-transparent h-14 px-6 text-base placeholder:text-gray-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+              <Button
+                onClick={() => handleSendMessage(input)}
+                disabled={isProcessing || !input.trim()}
+                className="m-2 h-10 w-10 rounded-xl bg-primary hover:bg-primary/90 transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                size="icon"
+              >
+                {isProcessing ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Send className="h-5 w-5" />
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+
+      {/* Real Camera Capture Component */}
+      <CameraCapture
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onImageCaptured={handleCameraImageCaptured}
+      />
+    </>
   );
 }
