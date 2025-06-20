@@ -1,5 +1,6 @@
 ollama
 opencv-python
+numpy
 langchain-community
 langchain-text-splitters
 langchain-ollama

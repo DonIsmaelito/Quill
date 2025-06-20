@@ -374,7 +374,7 @@ const ChatInput = ({
 
           // Extract field updates from the response (same logic as regular chat)
           const fieldUpdatesMatch = responseContent.match(
-            /\{['"]field_updates['"]:\s*\[.*?\]\}/
+            /\{['"]field_updates['"]:\s*\[[\s\S]*?\]\}/
           );
           let updatedFields: { id: string; value: string }[] = [];
 
@@ -406,12 +406,23 @@ const ChatInput = ({
           // Note: ChatInput doesn't have direct access to form update functions
           // This would need to be passed as a prop if form updates are needed here
           if (updatedFields.length > 0) {
-            console.log(
-              "Voice: Field updates detected but no handler available in ChatInput"
+            // Filter out MISSING values before processing
+            const actualUpdates = updatedFields.filter(
+              (update) =>
+                update.value !== "MISSING" &&
+                update.value !== "missing" &&
+                update.value?.toString().toUpperCase() !== "MISSING"
             );
-            console.log(
-              "Voice: Consider using AssistantPanel for voice interactions with form updates"
-            );
+
+            if (actualUpdates.length > 0) {
+              console.log(
+                "Voice: Field updates detected but no handler available in ChatInput"
+              );
+              console.log(
+                "Voice: Consider using AssistantPanel for voice interactions with form updates"
+              );
+              console.log("Voice: Filtered field updates:", actualUpdates);
+            }
           }
         } else if (msg.type === "error") {
           console.error("Server error:", msg.content);
