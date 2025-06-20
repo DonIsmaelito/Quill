@@ -1,0 +1,82 @@
+# Core ML/RL dependencies
+numpy>=1.21.0
+gymnasium>=0.26.0
+torch>=1.13.0
+
+# Document processing
+PyPDF2>=2.11.0
+PyMuPDF>=1.20.0
+pytesseract>=0.3.10
+Pillow>=9.2.0
+
+# NLP and embeddings
+langchain==0.1.0
+langchain-community==0.1.0
+langchain-openai==0.0.5
+openai>=0.27.0
+chromadb>=0.3.0
+
+# Web framework
+fastapi>=0.95.0
+uvicorn>=0.20.0
+python-multipart==0.0.6
+
+# Utilities
+python-dotenv>=0.20.0
+pydantic==2.5.0
+pandas>=1.4.0
+tqdm>=4.64.0
+
+# Document loaders
+unstructured==0.11.0
+python-docx==1.1.0
+
+# Monitoring and logging
+wandb==0.16.1
+tensorboard>=2.10.0
+
+# Additional dependencies
+matplotlib>=3.5.0
+seaborn>=0.11.0
+scikit-learn>=1.1.0
+transformers>=4.21.0
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.0
+datasets>=2.0.0
+accelerate>=0.12.0
+
+# NLP and language processing
+spacy>=3.4.0
+nltk>=3.7.0
+
+# Vector database and search
+chromadb>=0.3.0
+
+# OCR and document processing
+pytesseract>=0.3.10
+opencv-python>=4.6.0
+Pillow>=9.2.0
+PyPDF2>=2.11.0
+PyMuPDF>=1.20.0
+
+# Reinforcement learning
+gymnasium>=0.26.0
+stable-baselines3>=1.6.0
+
+# API and web frameworks
+fastapi>=0.95.0
+uvicorn>=0.20.0
+openai>=0.27.0
+
+# Utilities
+python-dotenv>=0.20.0
+click>=8.1.0
+tqdm>=4.64.0
+psutil>=5.9.0
+
+# Testing
+pytest>=7.1.0
+pytest-asyncio>=0.20.0
+
+# Data processing for real forms
+pathlib>=1.0.1

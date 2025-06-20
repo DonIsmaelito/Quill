@@ -16,7 +16,8 @@ import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path
 from unstructured.partition.pdf import partition_pdf
-
+import cv2
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict, Any, Union
@@ -30,7 +31,6 @@ from starlette.websockets import WebSocketState
 
 load_dotenv()
 
-# Performance optimization: Using gpt-3.5-turbo for faster response times (~400ms vs ~1200ms)
 OPENAI_MODEL_NAME = "gpt-3.5-turbo"
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -85,6 +85,197 @@ class UserInfoRequest(BaseModel):
     info: Dict[str, Any]
 
 ## Helper Functions
+
+def detect_document_boundaries(image_bytes):
+    """Detect document boundaries in an image using OpenCV."""
+    try:
+        # Convert bytes to numpy array
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if image is None:
+            return {"document_detected": False, "confidence": 0.0}
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Apply Gaussian blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Edge detection
+        edges = cv2.Canny(blurred, 50, 150, apertureSize=3)
+        
+        # Find contours
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not contours:
+            return {"document_detected": False, "confidence": 0.0}
+        
+        # Find the largest contour (likely the document)
+        largest_contour = max(contours, key=cv2.contourArea)
+        
+        # Get bounding rectangle
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        
+        # Calculate confidence based on contour area vs image area
+        image_area = image.shape[0] * image.shape[1]
+        contour_area = cv2.contourArea(largest_contour)
+        confidence = min(contour_area / image_area, 1.0)
+        
+        # Consider it a document if it takes up a reasonable portion of the image
+        # and has a rectangular shape
+        aspect_ratio = w / h
+        is_reasonable_size = contour_area > (image_area * 0.1)  # At least 10% of image
+        is_reasonable_shape = 0.3 < aspect_ratio < 3.0  # Not too thin/wide
+        
+        document_detected = is_reasonable_size and is_reasonable_shape and confidence > 0.3
+        
+        return {
+            "document_detected": document_detected,
+            "confidence": confidence,
+            "bounds": {
+                "x": int(x),
+                "y": int(y), 
+                "width": int(w),
+                "height": int(h)
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in document detection: {e}")
+        return {"document_detected": False, "confidence": 0.0}
+
+def enhance_document_image(image_bytes):
+    """Enhance document image quality for better OCR."""
+    try:
+        # Convert bytes to numpy array
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if image is None:
+            return image_bytes  # Return original if processing fails
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Apply adaptive thresholding to improve text clarity
+        processed = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        
+        # Denoise
+        processed = cv2.medianBlur(processed, 3)
+        
+        # Convert back to bytes
+        _, buffer = cv2.imencode('.jpg', processed)
+        return buffer.tobytes()
+        
+    except Exception as e:
+        logging.error(f"Error enhancing image: {e}")
+        return image_bytes  # Return original if processing fails
+
+def process_camera_image_for_form_structure(image_bytes):
+    """Process camera image to extract form structure from blank form."""
+    try:
+        # Save image temporarily for OCR processing
+        temp_image_path = "temp_camera_image.jpg"
+        with open(temp_image_path, "wb") as f:
+            f.write(image_bytes)
+        
+        # Extract text using pytesseract OCR (same as your PDF processing)
+        image = Image.open(temp_image_path)
+        extracted_text = pytesseract.image_to_string(image)
+        
+        # Clean up temp file
+        if os.path.exists(temp_image_path):
+            os.remove(temp_image_path)
+        
+        if not extracted_text.strip():
+            logging.warning("No text extracted from camera image")
+            return []
+        
+        logging.info(f"OCR extracted text from blank form: {extracted_text}")
+        
+        # Prompt to extract form field structure (not values)
+        prompt = (
+            "You You are a medical form filling extractor that is going to be "
+            "You are analyzing a blank or empty form to identify its structure. Your task is to extract form field definitions to create a digital form.\n\n"
+            "TASK: Identify all form fields from this blank form and create a JSON array of field objects.\n\n"
+            "GUIDELINES:\n"
+            "- Look for field labels, input areas, checkboxes, dropdown indicators\n"
+            "- Identify the field type based on context:\n"
+            "  * 'text' for name, address, notes fields\n"
+            "  * 'email' for email addresses\n"
+            "  * 'tel' for phone numbers\n"
+            "  * 'date' for dates (DOB, etc.)\n"
+            "  * 'select' for dropdown/choice fields\n"
+            "  * 'checkbox' for yes/no or multiple choice options\n"
+            "  * 'textarea' for large text areas\n"
+            "- Use camelCase for field IDs (e.g., 'firstName', 'dateOfBirth', 'insuranceProvider')\n"
+            "- Mark fields as required if they appear mandatory (asterisk, 'required', etc.)\n"
+            "- For select/checkbox fields, include common options if visible\n\n"
+            "OUTPUT FORMAT: Return a JSON array of field objects with this structure:\n"
+            "[\n"
+            "  {\n"
+            "    \"id\": \"fieldId\",\n"
+            "    \"label\": \"Field Label\",\n"
+            "    \"type\": \"text|email|tel|date|select|checkbox|textarea\",\n"
+            "    \"required\": true/false,\n"
+            "    \"options\": [\"option1\", \"option2\"] // only for select/checkbox\n"
+            "  }\n"
+            "]\n\n"
+            "EXAMPLES:\n"
+            "- 'Patient Name: ___________' → {\"id\": \"patientName\", \"label\": \"Patient Name\", \"type\": \"text\", \"required\": true}\n"
+            "- 'Date of Birth: __/__/____' → {\"id\": \"dateOfBirth\", \"label\": \"Date of Birth\", \"type\": \"date\", \"required\": true}\n"
+            "- 'Phone: (___) ___-____' → {\"id\": \"phoneNumber\", \"label\": \"Phone\", \"type\": \"tel\", \"required\": false}\n"
+            "- 'Gender: □ Male □ Female □ Other' → {\"id\": \"gender\", \"label\": \"Gender\", \"type\": \"select\", \"required\": false, \"options\": [\"Male\", \"Female\", \"Other\"]}\n\n"
+            f"FORM TEXT TO ANALYZE:\n{extracted_text}\n\n"
+            "OUTPUT (JSON ARRAY ONLY, NO OTHER TEXT):"
+        )
+        
+        logging.info(f"Processing blank form structure with GPT")
+        
+        # Use GPT-4o nano for processing
+        response = openai_client.chat.completions.create(
+            model=OPENAI_MODEL_NAME,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            n=1,
+            stop=None
+        )
+        
+        raw_output = response.choices[0].message.content.strip()
+        logging.info(f"GPT response for form structure: {raw_output}")
+        
+        # Extract JSON array from response
+        json_match = re.search(r'\[.*\]', raw_output, re.DOTALL)
+        json_str = json_match.group(0) if json_match else "[]"
+        
+        try:
+            form_fields = json.loads(json_str)
+            logging.info(f"Successfully extracted {len(form_fields)} form fields")
+            return form_fields
+        except json.JSONDecodeError as e:
+            # Try to repair common JSON issues
+            logging.warning(f"JSON parsing failed: {e}, attempting to fix")
+            # Replace single quotes with double quotes
+            json_str = json_str.replace("'", "\"")
+            # Fix missing quotes around keys
+            json_str = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', json_str)
+            
+            try:
+                form_fields = json.loads(json_str)
+                logging.info(f"Fixed JSON and extracted {len(form_fields)} form fields")
+                return form_fields
+            except Exception as e2:
+                logging.error(f"Failed to fix JSON: {e2}")
+                return []
+            
+    except Exception as e:
+        logging.error(f"Error processing camera image for form structure: {e}")
+        return []
 
 def flatten_json(data, parent_key='', sep='_'):
     """Recursively flatten a nested JSON object into a flat dictionary."""
@@ -880,10 +1071,23 @@ def create_retriever(vector_db):
         logging.error(f"Error creating retriever: {e}")
         return None
 
-def answer_query(llm, question, user_info="", chat_history="", new_form=None, form_fields=None, allow_field_updates: bool = True):
+def answer_query(llm, question, user_info="", chat_history="", new_form=None, form_fields=None, allow_field_updates: bool = True, language: str = "en"):
     """
     Answer a query using stored data and vector DBs of uploaded forms.
     """
+    # Language-specific prompt instructions
+    language_instructions = {
+        "en": "Please respond in English.",
+        "es": "Por favor responde en español.",
+        "fr": "Veuillez répondre en français.",
+        "de": "Bitte antworten Sie auf Deutsch.",
+        "it": "Si prega di rispondere in italiano.",
+        "pt": "Por favor, responda em português.",
+        "zh": "请用中文回答。",
+        "ar": "يرجى الرد باللغة العربية."
+    }
+    
+    language_instruction = language_instructions.get(language, language_instructions["en"])
     try:
         user_info_dict = json.loads(user_info) if isinstance(user_info, str) and user_info.strip() else user_info
     except Exception as e:
@@ -901,6 +1105,7 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
     
         template = (
             "You are a friendly and helpful medical administrative assistant at a clinic. Your role is to help patients understand and complete their medical forms.\n\n"
+            "LANGUAGE INSTRUCTION: {language_instruction}\n\n"
             "FORM TO COMPLETE:\n{new_form_context}\n\n"
             "PATIENT INFORMATION:\n{user_info}\n\n"
             "CHAT HISTORY:\n{chat_history}\n\n"
@@ -928,12 +1133,13 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "   - Always maintain patient privacy and confidentiality\n\n"
             "QUESTION: {question}\n\n"
             "ANSWER (DO NOT USE ANY NESTED STRUCTURE IN JSON. USE ONLY FLAT, ONE-LEVEL JSON. ANSWER ONLY JSON, NOTHING ELSE):"
-        ).format(new_form_context=new_form_context, user_info=user_info, chat_history=chat_history, question=question)
+        ).format(new_form_context=new_form_context, user_info=user_info, chat_history=chat_history, question=question, language_instruction=language_instruction)
         
         prompt_text = template
     else:
         base_prompt = (
             "You are a friendly and helpful medical administrative assistant at a clinic. Your role is to help patients understand and complete their medical forms.\n\n"
+            "LANGUAGE INSTRUCTION: {language_instruction}\n\n"
             "PATIENT INFORMATION:\n{user_info}\n\n"
             "CHAT HISTORY:\n{chat_history}\n\n"
             "CURRENT MEDICAL FORM FIELDS AND VALUES:\n{form_fields}\n\n"
@@ -971,7 +1177,7 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
         if allow_field_updates:
             prompt_text += "Remember to provide the answer in this format all in one line: {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
 
-        prompt_text = prompt_text.format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question)
+        prompt_text = prompt_text.format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question, language_instruction=language_instruction)
     
     
     logging.info(f"Prompt text: {prompt_text}")
@@ -1298,7 +1504,8 @@ async def query_endpoint(
     message: str = Form(...),
     documentName: Optional[str] = Form(None),
     chatHistory: Optional[str] = Form(None),
-    formFields: Optional[str] = Form(None)
+    formFields: Optional[str] = Form(None),
+    language: Optional[str] = Form("en")
 ):
     """Answer a query using stored data."""
     try:
@@ -1330,7 +1537,8 @@ async def query_endpoint(
                 chat_history=chat_history_formatted,
                 new_form=data,
                 form_fields=formFields,
-                allow_field_updates=True  # always allow when a PDF form is provided
+                allow_field_updates=True,  # always allow when a PDF form is provided
+                language=language
             )
         else:
             # Answer without document
@@ -1347,6 +1555,7 @@ async def query_endpoint(
                 chat_history=chat_history_formatted,
                 form_fields=formFields,
                 allow_field_updates=allow_updates,
+                language=language
             )
         
         return {"content": response}
@@ -1525,6 +1734,68 @@ async def get_user_info():
     except Exception as e:
         logging.error(f"Error getting user info: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get user info: {str(e)}")
+
+@app.post("/vision/detect-document")
+async def detect_document_endpoint(file: UploadFile = File(...)):
+    """Detect document boundaries in camera feed."""
+    try:
+        # Read image bytes
+        image_bytes = await file.read()
+        
+        # Detect document boundaries
+        result = detect_document_boundaries(image_bytes)
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"Error detecting document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/vision/process-camera-image")  
+async def process_camera_image_endpoint(file: UploadFile = File(...)):
+    """Process camera-captured blank form image and create form structure."""
+    try:
+        # Read image bytes
+        image_bytes = await file.read()
+        
+        # Enhance image quality
+        enhanced_image = enhance_document_image(image_bytes)
+        
+        # Extract form structure from blank form
+        form_fields = process_camera_image_for_form_structure(enhanced_image)
+        
+        if not form_fields:
+            return {"success": False, "message": "No form fields could be detected in the image"}
+        
+        # Create the curr_form.json structure
+        form_structure = {
+            "title": "Scanned Form",
+            "description": "Form generated from camera scan",
+            "fields": form_fields
+        }
+        
+        # Save to mockups/frontend2/temp/curr_form.json
+        curr_form_path = os.path.join('mockups', 'frontend2', 'temp', 'curr_form.json')
+        
+        # Ensure the temp directory exists
+        os.makedirs(os.path.dirname(curr_form_path), exist_ok=True)
+        
+        # Write the form structure
+        with open(curr_form_path, 'w') as f:
+            json.dump(form_structure, f, indent=2)
+        
+        logging.info(f"Created curr_form.json with {len(form_fields)} fields at {curr_form_path}")
+        
+        return {
+            "success": True,
+            "message": f"Successfully created form with {len(form_fields)} fields",
+            "form_path": curr_form_path,
+            "form_structure": form_structure
+        }
+        
+    except Exception as e:
+        logging.error(f"Error processing camera image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # --- Voice agent helper ----------------------------------------------------
 try:
@@ -1714,6 +1985,9 @@ async def voice_ws(websocket: WebSocket):
     
     # Store form fields for context (will be sent by frontend)
     current_form_fields = None
+    
+    # Store user's selected language (default to English)
+    selected_language = "en"
 
     try:
         while True:
@@ -1745,6 +2019,17 @@ async def voice_ws(websocket: WebSocket):
                         continue
                     except Exception as e:
                         logging.error("voice_ws: error parsing form fields: %s", e)
+                        continue
+                
+                # Check for language preference update
+                if text_msg.startswith("LANGUAGE:"):
+                    try:
+                        language_code = text_msg[9:]  # Remove "LANGUAGE:" prefix
+                        selected_language = language_code
+                        logging.debug(f"voice_ws: language set to {selected_language}")
+                        continue
+                    except Exception as e:
+                        logging.error("voice_ws: error parsing language: %s", e)
                         continue
                 
                 if text_msg.upper() != "END":
@@ -1836,6 +2121,7 @@ async def voice_ws(websocket: WebSocket):
                                             user_info=load_user_info(),
                                             chat_history="\n".join([f"{m['type']}: {m['content']}" for m in conversation]),
                                             form_fields=current_form_fields,
+                                            language=selected_language
                                         )
                                         
                                         # Check if auto-fill response contains field updates
@@ -1877,6 +2163,7 @@ async def voice_ws(websocket: WebSocket):
                             chat_history="\n".join([f"{m['type']}: {m['content']}" for m in conversation]),
                             form_fields=current_form_fields,  # Include form fields for context
                             allow_field_updates=allow_updates,
+                            language=selected_language
                         )
                     except Exception as e:
                         await websocket.send_json({"type": "error", "content": f"LLM error: {e}"})

@@ -15,6 +15,7 @@ import { ragService } from "../services/ragService";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
 import { CameraCapture } from "./CameraCapture";
+import LanguageSelector from "./LanguageSelector";
 
 // Not exactly the same as in Index.tsx
 interface FormField {
@@ -57,6 +58,7 @@ export function AssistantPanel({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -69,6 +71,41 @@ export function AssistantPanel({
   useEffect(() => {
     formValuesRef.current = formValues;
   }, [formValues]);
+
+  // Load saved language preference from localStorage
+  useEffect(() => {
+    const savedLanguage = localStorage.getItem("quill-language");
+    if (savedLanguage) {
+      setSelectedLanguage(savedLanguage);
+    }
+  }, []);
+
+  // Handle language change
+  const handleLanguageChange = (languageCode: string) => {
+    setSelectedLanguage(languageCode);
+    localStorage.setItem("quill-language", languageCode);
+
+    // Add a system message to inform the user about the language change
+    const languageNames: { [key: string]: string } = {
+      en: "English",
+      es: "Spanish",
+      fr: "French",
+      de: "German",
+      it: "Italian",
+      pt: "Portuguese",
+      zh: "Chinese",
+      ar: "Arabic",
+    };
+
+    const systemMessage = `Language switched to ${languageNames[languageCode]}. I'll now respond in ${languageNames[languageCode]}.`;
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      content: systemMessage,
+      type: "assistant",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, newMessage]);
+  };
 
   useEffect(() => {
     const welcomeMessage = generateWelcomeMessage(formTitle, formFields);
@@ -285,7 +322,8 @@ export function AssistantPanel({
       // Process message with form fields
       const response = await ragService.processUserMessage(
         message,
-        currentFormFields
+        currentFormFields,
+        selectedLanguage
       );
       // // delay for 2 seconds to simulate processing
       // await new Promise(resolve => setTimeout(resolve, 2000));
@@ -429,7 +467,8 @@ export function AssistantPanel({
         "I've uploaded a new document that has updated the information in your system under PATIENT INFORMATION. Try to fill out any additional fields in the form that you can that dont have a value yet (whose values in the CURRENT MEDICAL FORM FIELDS AND VALUES is MISSING). DO NOT confirm fields that are already filled out, and DO NOT ask about other fields whose data is not available in PATIENT INFORMATION. Simply give the new fields that can be filled out along with their values in the requested format.";
       const response = await ragService.processUserMessage(
         message,
-        currentFormFields
+        currentFormFields,
+        selectedLanguage
       );
       // // delay for 2 seconds to simulate processing
       // await new Promise(resolve => setTimeout(resolve, 2000));
@@ -644,6 +683,11 @@ export function AssistantPanel({
 
     wsRef.current.onopen = () => {
       console.log("Voice WebSocket connected");
+      // Send language preference to voice agent
+      if (selectedLanguage) {
+        wsRef.current?.send(`LANGUAGE:${selectedLanguage}`);
+        console.log(`Sent language preference: ${selectedLanguage}`);
+      }
       // Send current form fields when connection opens
       sendFormFieldsToWebSocket();
     };
@@ -1262,7 +1306,13 @@ export function AssistantPanel({
       <Card className="flex flex-col h-full">
         <div className="p-4 border-b flex justify-between items-center">
           <h2 className="text-lg font-semibold">Assistant</h2>
-          <ThemeToggle />
+          <div className="flex items-center space-x-3">
+            <LanguageSelector
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={handleLanguageChange}
+            />
+            <ThemeToggle />
+          </div>
         </div>
 
         <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">

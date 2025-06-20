@@ -133,6 +133,7 @@ def detect_file_upload_request(transcript: str) -> dict:
         "receipt": "receipt",
         "invoice": "invoice",
         "contract": "contract"
+        
     }
     
     # Common file locations (user can customize these)
@@ -140,7 +141,10 @@ def detect_file_upload_request(transcript: str) -> dict:
         "desktop": "~/Desktop",
         "downloads": "~/Downloads", 
         "documents": "~/Documents",
-        "docs": "~/Documents"
+        "docs": "~/Documents",
+        "my documents": "~/Documents",
+        "my desktop": "~/Desktop",
+        "my downloads": "~/Downloads",
     }
     
     # Check if it's an upload request
