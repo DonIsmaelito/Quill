@@ -21,4 +21,5 @@ flax
 transformers
 huggingface_hub
 googletrans
+elevenlabs
 # protobuf==3.20

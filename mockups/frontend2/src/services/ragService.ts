@@ -89,7 +89,7 @@ class RAGService {
     }
   }
 
-  async processDocument(file: File): Promise<{ message: string }> {
+  async processDocument(file: File): Promise<{ message: string, extracted_info: object}> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('mode', 'ingest');
@@ -103,7 +103,24 @@ class RAGService {
       type: this.determineDocumentType(file.name)
     });
 
-    return { message: response.message };
+    return { message: response.message, extracted_info: response.extracted_info};
+  }
+
+  async processNewFormTemplate(file: File): Promise<{ message: string, extracted_info: object}> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mode', 'ingest-form-template')
+
+    const response = await this.callApi('rag', 'POST', formData);
+    
+    // Add document to local list
+    this.documents.push({
+      id: Date.now(),
+      name: file.name,
+      type: this.determineDocumentType(file.name)
+    });
+
+    return { message: response.message, extracted_info: response.extracted_info};
   }
 
   private determineDocumentType(fileName: string): string {

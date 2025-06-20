@@ -13,6 +13,7 @@ load_dotenv(dotenv_path)
 
 API_KEY = os.getenv("ELEVENLABS_API_KEY")
 if not API_KEY:
+    # pass # for now (TODO: UNDO)
     raise RuntimeError(
         "ELEVENLABS_API_KEY not set. Please add it to your environment or .env file."
     )

@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ragService } from "../../../frontend2/src/services/ragService";
+import { FormField } from "../types/form";
+import { DigitizedForm } from "../components/DigitizedForm";
 
 interface LastEditedBy {
   name: string;
@@ -41,6 +44,13 @@ interface TemplateData {
   lastEditedOn?: Date;
   complianceStatus: "ok" | "warning" | "error";
   missingConsentFields?: string[];
+}
+
+interface TableField {
+  id: string;
+  type: "text" | "checkbox" | "radio" | "select" | "date" | "signature";
+  label: string;
+  value: string | boolean;
 }
 
 const categoryColors: Record<TemplateData["category"], string> = {
@@ -67,6 +77,103 @@ const timeAgo = (date?: Date): string => {
   return Math.floor(seconds) + "s ago";
 };
 
+// Helper function to determine field type from key
+const getFieldType = (key: string): FormField["type"] => {
+  if (key.startsWith("text")) return "text";
+  if (key.startsWith("boolean")) return "checkbox";
+  if (key.startsWith("date")) return "date";
+  return "text"; // default to text
+};
+
+// Helper function to process nested form data
+const processFormData = (
+  data: any,
+  parentId: string = "",
+  level: number = 0
+): FormField[] => {
+  const fields: FormField[] = [];
+  let yOffset = 0;
+
+  for (const [key, value] of Object.entries(data)) {
+    const currentId = parentId ? `${parentId}-${key}` : key;
+    
+    // If the value is an object and not a field type (text, boolean, date, table)
+    if (typeof value === "object" && value !== null && !key.match(/^(text|boolean|date|table)\d+$/)) {
+      // Add header as a text field with special styling
+      fields.push({
+        id: currentId,
+        type: "text",
+        label: key,
+        required: false,
+        value: "",
+        position: {
+          x: 0,
+          y: yOffset,
+          width: 600,
+          height: level === 0 ? 48 : 36
+        }
+      });
+      yOffset += level === 0 ? 60 : 48;
+
+      // Process children
+      const childFields = processFormData(value, currentId, level + 1);
+      fields.push(...childFields);
+      yOffset += childFields.length * 48; // Approximate height for child fields
+    } else if (key.match(/^(text|boolean|date|table)\d+$/)) {
+      const fieldType = getFieldType(key);
+      
+      if (key.startsWith("table")) {
+        // Process table fields
+        const tableFields: TableField[] = [];
+        for (const [colKey, colValue] of Object.entries(value)) {
+          const colType = getFieldType(colKey);
+          tableFields.push({
+            id: `${currentId}-${colKey}`,
+            type: colType,
+            label: Object.keys(colValue)[0],
+            value: colType === "checkbox" ? false : ""
+          });
+        }
+
+        // Add table as a text field with table data
+        fields.push({
+          id: currentId,
+          type: "text",
+          label: "", // Empty label for table type
+          required: false,
+          value: JSON.stringify(tableFields), // Store table data as JSON string
+          position: {
+            x: 0,
+            y: yOffset,
+            width: 600,
+            height: 200 // Height for table with one row
+          }
+        });
+        yOffset += 220; // Table height + margin
+      } else {
+        // Process regular fields
+        const fieldLabel = Object.keys(value)[0];
+        fields.push({
+          id: currentId,
+          type: fieldType,
+          label: fieldLabel,
+          required: false,
+          value: fieldType === "checkbox" ? false : "",
+          position: {
+            x: 0,
+            y: yOffset,
+            width: 300,
+            height: 40
+          }
+        });
+        yOffset += 48; // Field height + margin
+      }
+    }
+  }
+
+  return fields;
+};
+
 export default function Templates() {
   const navigate = useNavigate();
   const [selectedPdfUrl, setSelectedPdfUrl] = useState<string | null>(null);
@@ -74,6 +181,8 @@ export default function Templates() {
     null
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const [extractedFields, setExtractedFields] = useState<FormField[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [templates, setTemplates] = useState<TemplateData[]>([
     {
       id: "medical-history-form",
@@ -155,16 +264,20 @@ export default function Templates() {
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type === "application/pdf") {
+      // Create object URL immediately
+      const objectUrl = URL.createObjectURL(file);
       const fileNameWithoutExtension = file.name.replace(/\.pdf$/i, "");
+      
+      // Create and add new template immediately
       const newTemplate: TemplateData = {
         id: `uploaded-${Date.now()}`,
         name: fileNameWithoutExtension,
         category: "Other",
         uses: 0,
-        pdfUrl: URL.createObjectURL(file),
+        pdfUrl: objectUrl,
         description: "Uploaded PDF form.",
         tags: ["uploaded"],
         signatureFields: [],
@@ -174,11 +287,30 @@ export default function Templates() {
         complianceStatus: "warning",
         missingConsentFields: ["Review Needed"],
       };
+      
+      // Show the popup immediately
       setTemplates((prevTemplates) => [newTemplate, ...prevTemplates]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+      setSelectedPdfUrl(objectUrl);
+      setSelectedTemplateId(newTemplate.id);
+      setIsProcessing(true);
+
+      try {
+        // Process document using ragService
+        const response = await ragService.processNewFormTemplate(file);
+        console.log(response);
+        
+        // Process the hierarchical form data
+        const fields = processFormData(response.extracted_info);
+        setExtractedFields(fields);
+      } catch (error) {
+        console.error("Error processing PDF:", error);
+        alert("Error processing PDF. Please try again.");
+      } finally {
+        setIsProcessing(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
       }
-      alert(`Template "${newTemplate.name}" added from uploaded PDF!`);
     } else {
       alert("Please upload a valid PDF file.");
     }
@@ -234,21 +366,63 @@ export default function Templates() {
                 <ArrowLeft className="h-4 w-4" />
                 Back to Templates
               </Button>
-              <div className="mb-6 aspect-[8.5/11] w-full max-w-4xl mx-auto border rounded-lg overflow-hidden shadow-md">
-                <iframe
-                  src={selectedPdfUrl}
-                  title="Selected Template"
-                  width="100%"
-                  height="100%"
-                  className="border-0"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Original PDF View */}
+                <div className="aspect-[8.5/11] w-full border rounded-lg overflow-hidden shadow-md">
+                  <iframe
+                    src={selectedPdfUrl}
+                    title="Original Template"
+                    width="100%"
+                    height="100%"
+                    className="border-0"
+                  />
+                </div>
+                {/* Digitized Form View */}
+                <div className="aspect-[8.5/11] w-full border rounded-lg overflow-hidden shadow-md bg-white">
+                  {isProcessing ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-primary mx-auto mb-4"></div>
+                        <p className="text-medical-text">Processing PDF...</p>
+                      </div>
+                    </div>
+                  ) : extractedFields.length > 0 ? (
+                    <DigitizedForm 
+                      fields={extractedFields} 
+                      onDeleteField={(fieldId) => {
+                        setExtractedFields(prev => prev.filter(field => field.id !== fieldId));
+                      }}
+                      onAddField={(newField, index) => {
+                        setExtractedFields(prev => {
+                          const newFields = [...prev];
+                          newFields.splice(index, 0, newField);
+                          return newFields;
+                        });
+                      }}
+                      onEditField={(fieldId, updates) => {
+                        setExtractedFields(prev => 
+                          prev.map(field => 
+                            field.id === fieldId 
+                              ? { ...field, ...updates }
+                              : field
+                          )
+                        );
+                      }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-gray-500">No form fields extracted yet</p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="text-center">
+              <div className="text-center mt-6">
                 <Button
                   onClick={handleProceed}
                   className="bg-medical-primary hover:bg-medical-primary/90 px-8 py-3 text-base"
+                  disabled={isProcessing}
                 >
-                  Proceed to Assign Patient
+                  {isProcessing ? "Processing..." : "Proceed to Assign Patient"}
                 </Button>
               </div>
             </div>

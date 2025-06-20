@@ -166,7 +166,7 @@ export async function POST(request: Request) {
     const mode = formData.get("mode");
     console.log("Request mode:", mode);
 
-    if (mode === "ingest") {
+    if (mode === "ingest" || mode === "ingest-form-template") {
       const file = formData.get("file") as File;
       if (!file) {
         return addCorsHeaders(
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
       try {
         // Call the FastAPI ingest endpoint
         const response = await axios.post(
-          `${FASTAPI_URL}/ingest`,
+          `${FASTAPI_URL}/${mode}`,
           apiFormData,
           {
             headers: {

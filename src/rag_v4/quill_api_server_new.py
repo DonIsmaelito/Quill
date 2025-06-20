@@ -3,6 +3,7 @@ import json
 import re
 import logging
 import argparse
+
 from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
 )
@@ -14,6 +15,8 @@ from langchain_core.documents import Document
 import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path
+from unstructured.partition.pdf import partition_pdf
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict, Any, Union
@@ -140,18 +143,38 @@ def extract_text_from_pdf_with_ocr(file_path):
         logging.error(f"Error processing PDF with OCR: {e}")
         return None
 
-def ingest_file(file_path):
+def extract_components_from_native_pdf(file_path):
+    """Extract text from PDF using native extraction."""
+    logging.info(f"Processing PDF natively: {file_path}")
+
+    try:
+        # Use unstructured library to partition PDF
+        elements = partition_pdf(file_path)
+        logging.info(f"Extracted {len(elements)} elements from PDF")
+        return elements, False
+    except Exception as e:
+        logging.error(f"Error extracting components from PDF natively: {e}")
+        return extract_text_from_pdf_with_ocr(file_path), True
+
+def ingest_file(file_path, get_native_elements=False):
     """Load a file (PDF, Word, image, or CSV) with OCR for PDFs."""
     if not os.path.exists(file_path):
         logging.error(f"File not found: {file_path}")
-        return None
+        return None, False
         
     ext = os.path.splitext(file_path)[1].lower()
     
     try:
+        used_pdf_ocr = False
         if ext == ".pdf":
             # Use OCR for PDF processing
-            data = extract_text_from_pdf_with_ocr(file_path)
+            if get_native_elements:
+                logging.info("Extracting native elements from PDF")
+                data, used_pdf_ocr = extract_components_from_native_pdf(file_path)
+            else:
+                logging.info("Extracting text from PDF with OCR")
+                data = extract_text_from_pdf_with_ocr(file_path)
+                used_pdf_ocr = True
         elif ext in [".doc", ".docx"]:
             loader = UnstructuredWordDocumentLoader(file_path=file_path)
             data = loader.load()
@@ -164,13 +187,13 @@ def ingest_file(file_path):
             data = loader.load()
         else:
             logging.error(f"Unsupported file format: {ext}")
-            return None
+            return None, False
             
         logging.info(f"File {file_path} loaded successfully with {len(data) if data else 0} documents.")
-        return data
+        return data, used_pdf_ocr
     except Exception as e:
         logging.error(f"Error loading file {file_path}: {e}")
-        return None
+        return None, False
 
 def split_documents(documents):
     """Split documents into smaller chunks with optimized parameters."""
@@ -272,6 +295,11 @@ def extract_key_value_info(chunks, text, llm):
         json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
         json_str = json_match.group(0) if json_match else "{}"
         
+        logging.info("!\n"*100)
+        print(f"Extracted JSON string: {json_str}")
+        logging.warning(f"Extracted JSON string: {json_str}")
+        logging.info("!\n"*100)
+        
         try:
             info = json.loads(json_str)
             logging.info(f"Successfully extracted {len(info)} fields")
@@ -294,6 +322,452 @@ def extract_key_value_info(chunks, text, llm):
     except Exception as e:
         logging.error(f"Error in key-value extraction: {e}")
         return {}
+
+def extract_template_key_value_info(elements, used_pdf_ocr=False):
+    """Extract key-value pairs from document elements using enhanced prompts."""
+    try:
+        logging.info("Extracting key-value pairs from template document elements")
+        if not elements:
+            logging.warning("No chunks provided for extraction")
+            return {}
+        
+        # Stringify JSON object representation of the elements
+        if not used_pdf_ocr:
+            elements = [element.to_dict() for element in elements]
+            def get_coords(element):
+                # Print JSON representation of the element
+                print(f"Element JSON: {json.dumps(element, indent=2)}")
+                page_num = element['metadata'].get('page_number', 0)
+                coords = element['metadata']['coordinates']
+                if coords:
+                    x1, y1 = coords['points'][0]
+                    # sort top to bottom, then left to right
+                    return  (page_num, y1, x1) 
+                else:
+                    return float("inf"), float("inf")  # put elements with no coordinates at the end
+
+            # Sort elements by their coordinates (top to bottom, then left to right)
+            elements = sorted(elements, key=get_coords)
+            # only take 'type' and 'text' fields from the elements
+            elements = [{"type": element["type"], "text": element["text"]} for element in elements]
+            full_text = json.dumps(elements, indent=2)
+        else:
+            # elements is actually the chunks of the result of normal OCR extraction
+            full_text = " ".join([chunk.page_content for chunk in elements])
+        logging.info(f'Full text for extraction: {full_text}')
+        
+        example_full_text = """
+[
+    {
+        "type": "Header",
+        "text": "MEDICAL HISTORY FORM TEMPLATE"
+    },
+    {
+        "type": "Title",
+        "text": "MEDICAL HISTORY FORM"
+    },
+    {
+        "type": "Title",
+        "text": "PATIENT NAME"
+    },
+    {
+        "type": "Title",
+        "text": "DATE of LAST UPDATE"
+    },
+    {
+        "type": "Title",
+        "text": "CURRENT PHYSICIAN NAME"
+    },
+    {
+        "type": "Title",
+        "text": "PHONE"
+    },
+    {
+        "type": "Title",
+        "text": "CURRENT PHARMACY NAME"
+    },
+    {
+        "type": "Title",
+        "text": "PHONE"
+    },
+    {
+        "type": "Title",
+        "text": "CURRENT and PAST MEDICATIONS"
+    },
+    {
+        "type": "Title",
+        "text": "MEDICATION NAME"
+    },
+    {
+        "type": "Title",
+        "text": "DOSAGE"
+    },
+    {
+        "type": "UncategorizedText",
+        "text": "FREQ."
+    },
+    {
+        "type": "Title",
+        "text": "PHYSICIAN"
+    },
+    {
+        "type": "Title",
+        "text": "START DATE"
+    },
+    {
+        "type": "Title",
+        "text": "END DATE"
+    },
+    {
+        "type": "Title",
+        "text": "PURPOSE"
+    },
+    {
+        "type": "Title",
+        "text": "SURGICAL PROCEDURES"
+    },
+    {
+        "type": "Title",
+        "text": "PROCEDURE"
+    },
+    {
+        "type": "Title",
+        "text": "PHYSICIAN"
+    },
+    {
+        "type": "Title",
+        "text": "HOSPITAL"
+    },
+    {
+        "type": "Title",
+        "text": "DATE"
+    },
+    {
+        "type": "Title",
+        "text": "NOTES"
+    },
+    {
+        "type": "Title",
+        "text": "MAJOR ILLNESSES"
+    },
+    {
+        "type": "Title",
+        "text": "ILLNESS"
+    },
+    {
+        "type": "Title",
+        "text": "START DATE"
+    },
+    {
+        "type": "Title",
+        "text": "END DATE"
+    },
+    {
+        "type": "Title",
+        "text": "PHYSICIAN"
+    },
+    {
+        "type": "Title",
+        "text": "TREATMENT NOTES"
+    },
+    {
+        "type": "Title",
+        "text": "VACCINATIONS"
+    },
+    {
+        "type": "Title",
+        "text": "NAME"
+    },
+    {
+        "type": "Title",
+        "text": "DATE"
+    },
+    {
+        "type": "Title",
+        "text": "NAME"
+    },
+    {
+        "type": "Title",
+        "text": "DATE"
+    },
+    {
+        "type": "Title",
+        "text": "TETANUS"
+    },
+    {
+        "type": "Title",
+        "text": "MENINGITIS"
+    },
+    {
+        "type": "Title",
+        "text": "INFLUENZA VACCINE"
+    },
+    {
+        "type": "Title",
+        "text": "YELLOW FEVER"
+    },
+    {
+        "type": "Title",
+        "text": "ZOSTAVAX"
+    },
+    {
+        "type": "Title",
+        "text": "POLIO"
+    },
+    {
+        "type": "Footer",
+        "text": "OTHER:"
+    },
+    {
+        "type": "Footer",
+        "text": "OTHER:"
+    },
+    {
+        "type": "Header",
+        "text": "DISCLAIMER"
+    },
+    {
+        "type": "NarrativeText",
+        "text": "Any articles, templates, or information provided by Smartsheet on the website are for reference only. While we strive to keep the information up to date and correct, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability with respect to the website or the information, articles, templates, or related graphics contained on the website. Any reliance you place on such information is therefore strictly at your own risk."
+    }
+]
+"""
+            
+        example_full_text_response = """
+{
+    "Medical history form": {
+        "Patient": {
+            "text1": {
+                "Name": ""
+            },
+            "date1": {
+                "Date of last update": ""
+            }
+        },
+        "Physician": {
+            "text1": {
+                "Current physician name": ""
+            },
+            "text2": {
+                "Phone": ""
+            }
+        },
+        "Pharmacy": {
+            "text1": {
+                "Current pharmacy name": ""
+            },
+            "text2": {
+                "Phone": ""
+            }
+        },
+        "Current and past medications": {
+            "table1": {
+                "text1": {
+                    "Medication name": ""
+                },
+                "text2": {
+                    "Dosage": ""
+                },
+                "text3": {
+                    "Freq.": ""
+                },
+                "text4": {
+                    "Physician": ""
+                },
+                "date1": {
+                    "Start date": ""
+                },
+                "date2": {
+                    "End date": ""
+                },
+                "text5": {
+                    "Purpose": ""
+                }
+            }
+        },
+        "Surgical procedures": {
+            "table1": {
+                "text1": {
+                    "Procedure": ""
+                },
+                "text2": {
+                    "Physician": ""
+                },
+                "text3": {
+                    "Hospital": ""
+                },
+                "date1": {
+                    "Date": ""
+                },
+                "text4": {
+                    "Notes": ""
+                }
+            }
+        },
+        "Major illnesses": {
+            "table1": {
+                "text1": {
+                    "Illness": ""
+                },
+                "date1": {
+                    "Start date": ""
+                },
+                "date2": {
+                    "End date": ""
+                },
+                "text2": {
+                    "Physician": ""
+                },
+                "text3": {
+                    "Treatment notes": ""
+                }
+            }
+        },
+        "Vaccinations": {
+            "Tetanus": {
+                "date1": {
+                    "Tetanus date": ""
+                }
+            },
+            "Meningitis": {
+                "date1": {
+                    "Meningitis date": ""
+                }
+            },
+            "Influenza vaccine": {
+                "date1": {
+                    "Influenza vaccine date": ""
+                }
+            },
+            "Yellow fever": {
+                "date1": {
+                    "Yellow fever date": ""
+                }
+            },
+            "Zostavax": {
+                "date1": {
+                    "Zostavax date": ""
+                }
+            },
+            "Polio": {
+                "date1": {
+                    "Polio date": ""
+                }
+            },
+            "Other:": {
+                "text1": {
+                    "Other": ""
+                }
+            }
+        },
+        {
+            "Disclaimer": "Any articles, templates, or information provided by Smartsheet on the website are for reference only. While we strive to keep the information up to date and correct, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability with respect to the website or the information, articles, templates, or related graphics contained on the website. Any reliance you place on such information is therefore strictly at your own risk."
+        },
+        "text6": {
+            "Other comments:": ""
+        }
+    }
+}
+"""
+        
+        prompt = (
+            "You are a medical administrative assistant processing patient documents. Your task is to extract and organize fields from digitized medical form data.\n\n"
+            "TASK: Extract and organize ALL form fields (and values if they have any pre-filled) into a nested JSON object with typed key-value pairs.\n\n"
+            "GUIDELINES:\n"
+            "- For data that is semantically or explicitly structured in a hierarchical fashion, keep that hierarchical format in the output JSON:\n"
+            "  INSTEAD OF: {{'text1': {'Patient name': ''}}, {'text2': {'Patient phone number': ''}}} \n"
+            "  USE: {'Patient': {{'text1': {'Name': ''}}, {'text2': {'Phone number': ''}}}}\n"
+            "- Use common sense to make judgements about the structure of the data.\n"
+            "- The whole point of the hierarchical structure is so that when we construct a form based on the JSON, we can visually group fields that belong together.\n"
+            "- Ensure keys are specific and self-explanatory (e.g., 'Primary phone number' vs 'phone')\n"
+            "- If there are multiple instances of the same field in different sections of the document, keep all of them\n"
+            "- If there is no prefilled value, the value should be an empty string\n"
+            "- EXCLUDE metadata, schema information, vector embeddings, or system fields\n"
+            "- Indicate each field's type (text, boolean, date, etc.) as a parent JSON key followed by a number representing the field's position in that particular JSON element (e.g., 'text1', 'boolean2')\n"
+            "- Even if there are multiple fields with the same type, they each need to be typed with a unique key\n"
+            "- For example, use {{'text1': {'First name': ''}}, {'text2': {'Last name': ''}}} for text/string fields\n"
+            "- For example, use {'boolean1': {'hasAllergies': false}} or {'date1': {'vaccinationDate': ''}} for checkboxes or date fields\n"
+            "- Moreover, if it seems as though a set of fields is representing the columns of a table that can have multiple entries, AFTER the table name key, precede the table column fields with a parent JSON key indicating the 'table' type just as we did for booleans/dates/etc.\n"
+            "EXAMPLES OF PROPER TRANSFORMATIONS:\n"
+                "1. [{'type': 'Title', 'text': 'CURRENT and PAST MEDICATIONS'},{'type': 'Title', 'text': 'MEDICATION NAME'},{'type': 'Title', 'text': 'DOSAGE'}] → {'Current and past medications': {'table1': {{'text1': {'Medication name': ''}}, {'text2': {'Dosage': ''}}}}\n"
+                "2. [{'type': 'Title', 'text': 'VACCINATIONS'},{'type': 'Title', 'text': 'NAME'},{'type': 'Title', 'text': 'DATE'},{'type': 'Title', 'text': 'NAME'},{'type': 'Title', 'text': 'DATE'},{'type': 'Title', 'text': 'TETANUS'},{'type': 'Title', 'text': 'MENINGITIS'},{'type': 'Title', 'text': 'INFLUENZA VACCINE'},{'type': 'Title', 'text': 'YELLOW FEVER'}] → {'Vaccinations': {{'date1': {'Tetanus date': ''}}, {'date2': {'Meningitis date': ''}}, {'date3': {'Influenza vaccine date': ''}}, {'date4': {'Yellow fever date': ''}}}}\n\n"
+            "Notice how the second example wasn't a table with multiple entries to add in for each vaccination, but rather a set of fields that were semantically grouped together. There's only one entry per vaccination type.\n"
+            "REMEMBER to ALWAYS precede a table type JSON element with a parent JSON element indicating the table name—this is the only way for the table name to be included (as a subheader), as all table type child elements are column names.\n"
+            "IMPORTANT: Keep in mind that the given raw form text was obtained from OCR processing of a digitized form, so it may contain some noise or artifacts from the OCR process that you should ignore.\n"
+            "The text may not be perfectly structured, so do your best to infer the intended fields, possible values, and their relationships/structure.\n\n"
+            "Tables may be represented by a simple sequence of their column names right after each other. Identify possible tables and form their fields accordingly.\n"
+            "If there are checkboxes, represent them as boolean fields (e.g., {'boolean1': {'hasAllergies': false}}).\n"
+            "Don't output JSON arrays.\n"
+            "If there are ever any parts of the form that are just read-only text, like a disclaimer or instructions, include them as subheaders.\n"
+            "Always include an 'Other comments' field at the very end of the output JSON for the patient to fill in any additional information they want to provide.\n\n"
+            "Only use double quotes for JSON keys, and provide a properly formatted JSON object.\n"
+            "Create sections/subheaders as you see fit, and if you think some fields should exist but are not clearly defined in the raw text, feel free to add them with empty values.\n\n"
+            "Moreover, if it seems like a given field should be a certain data type (e.g., date, boolean, etc.), use that data type rather than just a string.\n"
+            "Also, find opportunities to make fields booleans if they are checkboxes or yes/no questions. For example, a field like 'Abnormal result?' should be a boolean even if it is not indicated as such.\n\n"
+            "Furthermore, the ONLY types that you can use are 'text', 'boolean', 'date', and 'table'. Don't use types such as 'NarrativeText' , 'Header', 'Footer', etc. because they are not valid JSON types.\n\n"
+            "That is, a field should never be Header*, Footer*, NarrativeText*, UncategorizedText*, or any other type that is not one of the four valid types.\n"
+            "Finally, if there is any data that seems like it would not make sense when formatting it as a JSON object for displaying in a form, do NOT include it in the output JSON.\n\n"
+            "Here's an example correct output based on the below raw form text:\n"
+            f"RAW FORM CONTENT:\n{example_full_text}\n\n"
+            "OUTPUT (NESTED JSON ONLY, NO OTHER TEXT):"
+            f"{example_full_text_response}\n\n"
+            "Now, you're turn:\n"
+            f"RAW FORM CONTENT:\n{full_text}\n\n"
+            "OUTPUT (NESTED JSON ONLY, NO OTHER TEXT):"
+        )
+            
+        # result = llm.invoke(input=prompt)
+        # raw_output = result.content.strip()
+        
+        logging.info(f"Prompt text: {prompt}")
+        
+        # make sure response is a JSON object
+        response = openai_client.chat.completions.create(
+            model=OPENAI_MODEL_NAME,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            n=1,
+            stop=None,
+            response_format={
+                "type": "json_object",
+            }
+        )
+        
+        logging.info(f"OpenAI response: {response}")
+        
+        raw_output = response.choices[0].message.content.strip()
+        
+        logging.info(f"Raw output from LLM: {raw_output}")
+        
+        # Robust JSON extraction
+        json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+        json_str = json_match.group(0) if json_match else "{}"
+        
+        try:
+            info = json.loads(json_str)
+            logging.info(f"Successfully extracted {len(info)} fields")
+            return info
+        except json.JSONDecodeError as e:
+            # Try to repair common JSON issues
+            logging.warning(f"JSON parsing failed: {e}, attempting to fix")
+            # Replace single quotes with double quotes
+            json_str = json_str.replace("'", "\"")
+            # Fix missing quotes around keys
+            json_str = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', json_str)
+            
+            try:
+                info = json.loads(json_str)
+                logging.info(f"Fixed JSON and extracted {len(info)} fields")
+                return info
+            except Exception as e2:
+                logging.error(f"Failed to fix JSON: {e2}")
+                return {}
+    except Exception as e:
+        logging.error(f"Error in key-value extraction: {e}")
+        return {}
+
 
 def sanitize_collection_name(name: str) -> str:
     """Sanitize collection name to meet Chroma requirements."""
@@ -650,7 +1124,7 @@ def update_user_info_from_doc_fast(file_path, current_info: dict):
     Fast version of update_user_info_from_doc that skips vector database creation.
     Used for voice uploads where we only need user info extraction for immediate auto-fill.
     """
-    data = ingest_file(file_path)
+    data, _ = ingest_file(file_path)
     if data is None:
         logging.error(f"Failed to ingest document from {file_path}")
         return current_info
@@ -677,7 +1151,7 @@ def update_user_info_from_doc(file_path, llm, current_info: dict):
     Update user_info by processing a new document.
     Also creates and persists a vector database for the update document.
     """
-    data = ingest_file(file_path)
+    data, _ = ingest_file(file_path)
     if data is None:
         logging.error(f"Failed to ingest document from {file_path}")
         return current_info
@@ -752,7 +1226,7 @@ async def ingest_document(file: UploadFile = File(...)):
         file_path = save_uploaded_file(content, file.filename)
         
         # Process document
-        data = ingest_file(file_path)
+        data, _ = ingest_file(file_path)
         if data is None:
             raise HTTPException(status_code=400, detail="Failed to ingest document")
             
@@ -787,6 +1261,38 @@ async def ingest_document(file: UploadFile = File(...)):
         logging.error(f"Error in ingest endpoint: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
+@app.post("/ingest-form-template")
+async def ingest_form_template(file: UploadFile = File(...)):
+    """Ingest a form template and extract key-value pairs."""
+    try:
+        logging.info(f"Processing form template: {file.filename}")
+        content = await file.read()
+
+        # Save the file
+        file_path = save_uploaded_file(content, file.filename)
+
+        # Process document
+        data, used_pdf_ocr = ingest_file(file_path, get_native_elements=True)
+        if data is None:
+            raise HTTPException(status_code=400, detail="Failed to ingest form template")
+
+        # chunks = split_documents(data)
+        # llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
+        key_value_info = extract_template_key_value_info(data, used_pdf_ocr)
+
+        # Flatten any nested structures before saving
+        # flat_key_value_info = flatten_json(key_value_info)
+
+        # Create and store vector DB
+        return {
+            "status": "success",
+            "message": "Form template processed",
+            "extracted_info": key_value_info
+        }
+    except Exception as e:
+        logging.error(f"Error in ingest form template endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process form template: {str(e)}")
+
 @app.post("/query")
 async def query_endpoint(
     message: str = Form(...),
@@ -813,7 +1319,7 @@ async def query_endpoint(
             logging.info(f"os.sep: {os.sep}")
             file_path = UPLOADS_DIR + os.path.sep + documentName
             logging.info(f"File path: {file_path}")
-            data = ingest_file(file_path)
+            data, _ = ingest_file(file_path)
             if data is None:
                 raise HTTPException(status_code=400, detail=f"Failed to load document: {documentName}")
                 
@@ -911,7 +1417,7 @@ async def process_blank_form(
         llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
         
         # Process the form
-        data = ingest_file(file_path)
+        data, _ = ingest_file(file_path)
         if data is None:
             raise HTTPException(status_code=400, detail="Failed to process blank form")
             
@@ -1303,7 +1809,7 @@ async def voice_ws(websocket: WebSocket):
                             filename = os.path.basename(file_path)
                             
                             # Ingest the file into the RAG system
-                            data = ingest_file(file_path)
+                            data, _ = ingest_file(file_path)
                             
                             if data:
                                 reply_text += f" The document has been processed and is now available for questions. You can ask me about the contents of {filename}."
