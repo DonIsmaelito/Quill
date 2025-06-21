@@ -10,7 +10,7 @@ nltk
 unstructured
 unstructured-inference
 unstructured.pytesseract
-# onnx
+#onnx
 pytesseract
 pdfminer.six
 pi_heif
@@ -23,4 +23,4 @@ transformers
 huggingface_hub
 googletrans
 elevenlabs
-# protobuf==3.20
+#protobuf==3.20

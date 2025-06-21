@@ -7,7 +7,7 @@ import argparse
 from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
 )
-from langchain.document_loaders.csv_loader import CSVLoader
+from langchain_community.document_loaders import CSVLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import OllamaEmbeddings, ChatOllama
@@ -16,7 +16,6 @@ import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path
 from unstructured.partition.pdf import partition_pdf
-import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -92,44 +91,44 @@ def detect_document_boundaries(image_bytes):
         # Convert bytes to numpy array
         nparr = np.frombuffer(image_bytes, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
+
         if image is None:
             return {"document_detected": False, "confidence": 0.0}
-        
+
         # Convert to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        
+
         # Apply Gaussian blur to reduce noise
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        
+
         # Edge detection
         edges = cv2.Canny(blurred, 50, 150, apertureSize=3)
-        
+
         # Find contours
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
+
         if not contours:
             return {"document_detected": False, "confidence": 0.0}
-        
+
         # Find the largest contour (likely the document)
         largest_contour = max(contours, key=cv2.contourArea)
-        
+
         # Get bounding rectangle
         x, y, w, h = cv2.boundingRect(largest_contour)
-        
+
         # Calculate confidence based on contour area vs image area
         image_area = image.shape[0] * image.shape[1]
         contour_area = cv2.contourArea(largest_contour)
         confidence = min(contour_area / image_area, 1.0)
-        
+
         # Consider it a document if it takes up a reasonable portion of the image
         # and has a rectangular shape
         aspect_ratio = w / h
         is_reasonable_size = contour_area > (image_area * 0.1)  # At least 10% of image
         is_reasonable_shape = 0.3 < aspect_ratio < 3.0  # Not too thin/wide
-        
+
         document_detected = is_reasonable_size and is_reasonable_shape and confidence > 0.3
-        
+
         return {
             "document_detected": document_detected,
             "confidence": confidence,
@@ -140,7 +139,7 @@ def detect_document_boundaries(image_bytes):
                 "height": int(h)
             }
         }
-        
+
     except Exception as e:
         logging.error(f"Error in document detection: {e}")
         return {"document_detected": False, "confidence": 0.0}
@@ -151,25 +150,25 @@ def enhance_document_image(image_bytes):
         # Convert bytes to numpy array
         nparr = np.frombuffer(image_bytes, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
+
         if image is None:
             return image_bytes  # Return original if processing fails
-        
+
         # Convert to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        
+
         # Apply adaptive thresholding to improve text clarity
         processed = cv2.adaptiveThreshold(
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
         )
-        
+
         # Denoise
         processed = cv2.medianBlur(processed, 3)
-        
+
         # Convert back to bytes
         _, buffer = cv2.imencode('.jpg', processed)
         return buffer.tobytes()
-        
+
     except Exception as e:
         logging.error(f"Error enhancing image: {e}")
         return image_bytes  # Return original if processing fails
@@ -181,21 +180,21 @@ def process_camera_image_for_form_structure(image_bytes):
         temp_image_path = "temp_camera_image.jpg"
         with open(temp_image_path, "wb") as f:
             f.write(image_bytes)
-        
+
         # Extract text using pytesseract OCR (same as your PDF processing)
         image = Image.open(temp_image_path)
         extracted_text = pytesseract.image_to_string(image)
-        
+
         # Clean up temp file
         if os.path.exists(temp_image_path):
             os.remove(temp_image_path)
-        
+
         if not extracted_text.strip():
             logging.warning("No text extracted from camera image")
             return []
-        
+
         logging.info(f"OCR extracted text from blank form: {extracted_text}")
-        
+
         # Prompt to extract form field structure (not values)
         prompt = (
             "You You are a medical form filling extractor that is going to be "
@@ -232,9 +231,9 @@ def process_camera_image_for_form_structure(image_bytes):
             f"FORM TEXT TO ANALYZE:\n{extracted_text}\n\n"
             "OUTPUT (JSON ARRAY ONLY, NO OTHER TEXT):"
         )
-        
+
         logging.info(f"Processing blank form structure with GPT")
-        
+
         # Use GPT-4o nano for processing
         response = openai_client.chat.completions.create(
             model=OPENAI_MODEL_NAME,
@@ -245,14 +244,14 @@ def process_camera_image_for_form_structure(image_bytes):
             n=1,
             stop=None
         )
-        
+
         raw_output = response.choices[0].message.content.strip()
         logging.info(f"GPT response for form structure: {raw_output}")
-        
+
         # Extract JSON array from response
         json_match = re.search(r'\[.*\]', raw_output, re.DOTALL)
         json_str = json_match.group(0) if json_match else "[]"
-        
+
         try:
             form_fields = json.loads(json_str)
             logging.info(f"Successfully extracted {len(form_fields)} form fields")
@@ -264,7 +263,7 @@ def process_camera_image_for_form_structure(image_bytes):
             json_str = json_str.replace("'", "\"")
             # Fix missing quotes around keys
             json_str = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', json_str)
-            
+
             try:
                 form_fields = json.loads(json_str)
                 logging.info(f"Fixed JSON and extracted {len(form_fields)} form fields")
@@ -272,7 +271,7 @@ def process_camera_image_for_form_structure(image_bytes):
             except Exception as e2:
                 logging.error(f"Failed to fix JSON: {e2}")
                 return []
-            
+
     except Exception as e:
         logging.error(f"Error processing camera image for form structure: {e}")
         return []
@@ -280,18 +279,18 @@ def process_camera_image_for_form_structure(image_bytes):
 def flatten_json(data, parent_key='', sep='_'):
     """Recursively flatten a nested JSON object into a flat dictionary."""
     items = []
-    
+
     if not data:
         return {}
-        
+
     for key, value in data.items():
         new_key = f"{parent_key}{sep}{key}" if parent_key else key
-        
+
         # Skip flattening vector database paths
         if isinstance(value, str) and VECTOR_DB_DIR in value:
             items.append((new_key, value))
             continue
-            
+
         if isinstance(value, dict):
             # Handle nested dictionaries
             items.extend(flatten_json(value, new_key, sep=sep).items())
@@ -310,26 +309,26 @@ def flatten_json(data, parent_key='', sep='_'):
 def extract_text_from_pdf_with_ocr(file_path):
     """Extract text from PDF using OCR."""
     logging.info(f"Processing PDF with OCR: {file_path}")
-    
+
     try:
         # Convert PDF pages to images
         images = convert_from_path(file_path, dpi=300)
         logging.info(f"Converted PDF to {len(images)} images")
-        
+
         # Process each page with OCR
         text_content = []
         for i, image in enumerate(images):
             logging.info(f"Processing page {i+1} with OCR")
             text = pytesseract.image_to_string(image)
             text_content.append(text)
-            
+
         # Combine all pages with page numbers for context
         full_text = ""
         for i, text in enumerate(text_content):
             full_text += f"\n--- Page {i+1} ---\n{text}\n"
-            
+
         return [Document(page_content=full_text, metadata={"source": file_path})]
-        
+
     except Exception as e:
         logging.error(f"Error processing PDF with OCR: {e}")
         return None
@@ -337,7 +336,7 @@ def extract_text_from_pdf_with_ocr(file_path):
 def extract_components_from_native_pdf(file_path):
     """Extract text from PDF using native extraction."""
     logging.info(f"Processing PDF natively: {file_path}")
-
+    
     try:
         # Use unstructured library to partition PDF
         elements = partition_pdf(file_path)
@@ -352,9 +351,9 @@ def ingest_file(file_path, get_native_elements=False):
     if not os.path.exists(file_path):
         logging.error(f"File not found: {file_path}")
         return None, False
-        
+
     ext = os.path.splitext(file_path)[1].lower()
-    
+
     try:
         used_pdf_ocr = False
         if ext == ".pdf":
@@ -379,7 +378,7 @@ def ingest_file(file_path, get_native_elements=False):
         else:
             logging.error(f"Unsupported file format: {ext}")
             return None, False
-            
+
         logging.info(f"File {file_path} loaded successfully with {len(data) if data else 0} documents.")
         return data, used_pdf_ocr
     except Exception as e:
@@ -391,7 +390,7 @@ def split_documents(documents):
     if not documents:
         logging.warning("No documents to split")
         return []
-        
+
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=1000)
     chunks = text_splitter.split_documents(documents)
     logging.info(f"Documents split into {len(chunks)} chunks.")
@@ -432,7 +431,7 @@ def extract_key_value_info(chunks, text, llm):
             if not chunks:
                 logging.warning("No chunks provided for extraction")
                 return {}
-                
+
             full_text = " ".join([chunk.page_content for chunk in chunks])
             logging.info(f'Full text for extraction: {full_text}')
             prompt = (
@@ -460,12 +459,12 @@ def extract_key_value_info(chunks, text, llm):
                 f"DATABASE CONTENT:\n{full_text}\n\n"
                 "OUTPUT (FLAT JSON ONLY, NO OTHER TEXT):"
             )
-            
+
         # result = llm.invoke(input=prompt)
         # raw_output = result.content.strip()
-        
+
         logging.info(f"Prompt text: {prompt}")
-        
+
         response = openai_client.chat.completions.create(
             model=OPENAI_MODEL_NAME,
             messages=[
@@ -475,22 +474,22 @@ def extract_key_value_info(chunks, text, llm):
             n=1,
             stop=None
         )
-        
+
         logging.info(f"OpenAI response: {response}")
-        
+
         raw_output = response.choices[0].message.content.strip()
-        
+
         logging.info(f"Raw output from LLM: {raw_output}")
-        
+
         # Robust JSON extraction
         json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
         json_str = json_match.group(0) if json_match else "{}"
-        
+
         logging.info("!\n"*100)
         print(f"Extracted JSON string: {json_str}")
         logging.warning(f"Extracted JSON string: {json_str}")
         logging.info("!\n"*100)
-        
+
         try:
             info = json.loads(json_str)
             logging.info(f"Successfully extracted {len(info)} fields")
@@ -502,7 +501,7 @@ def extract_key_value_info(chunks, text, llm):
             json_str = json_str.replace("'", "\"")
             # Fix missing quotes around keys
             json_str = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', json_str)
-            
+
             try:
                 info = json.loads(json_str)
                 logging.info(f"Fixed JSON and extracted {len(info)} fields")
@@ -521,7 +520,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
         if not elements:
             logging.warning("No chunks provided for extraction")
             return {}
-        
+
         # Stringify JSON object representation of the elements
         if not used_pdf_ocr:
             elements = [element.to_dict() for element in elements]
@@ -546,7 +545,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
             # elements is actually the chunks of the result of normal OCR extraction
             full_text = " ".join([chunk.page_content for chunk in elements])
         logging.info(f'Full text for extraction: {full_text}')
-        
+
         example_full_text = """
 [
     {
@@ -723,7 +722,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
     }
 ]
 """
-            
+
         example_full_text_response = """
 {
     "Medical history form": {
@@ -860,7 +859,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
     }
 }
 """
-        
+
         prompt = (
             "You are a medical administrative assistant processing patient documents. Your task is to extract and organize fields from digitized medical form data.\n\n"
             "TASK: Extract and organize ALL form fields (and values if they have any pre-filled) into a nested JSON object with typed key-value pairs.\n\n"
@@ -906,12 +905,12 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
             f"RAW FORM CONTENT:\n{full_text}\n\n"
             "OUTPUT (NESTED JSON ONLY, NO OTHER TEXT):"
         )
-            
+
         # result = llm.invoke(input=prompt)
         # raw_output = result.content.strip()
-        
+
         logging.info(f"Prompt text: {prompt}")
-        
+
         # make sure response is a JSON object
         response = openai_client.chat.completions.create(
             model=OPENAI_MODEL_NAME,
@@ -925,17 +924,17 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
                 "type": "json_object",
             }
         )
-        
+
         logging.info(f"OpenAI response: {response}")
-        
+
         raw_output = response.choices[0].message.content.strip()
-        
+
         logging.info(f"Raw output from LLM: {raw_output}")
-        
+
         # Robust JSON extraction
         json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
         json_str = json_match.group(0) if json_match else "{}"
-        
+
         try:
             info = json.loads(json_str)
             logging.info(f"Successfully extracted {len(info)} fields")
@@ -947,7 +946,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
             json_str = json_str.replace("'", "\"")
             # Fix missing quotes around keys
             json_str = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', json_str)
-            
+
             try:
                 info = json.loads(json_str)
                 logging.info(f"Fixed JSON and extracted {len(info)} fields")
@@ -964,7 +963,7 @@ def sanitize_collection_name(name: str) -> str:
     """Sanitize collection name to meet Chroma requirements."""
     if not name:
         return "default_collection"
-        
+
     name = name.lower()
     name = re.sub(r'\s+', '_', name)
     name = re.sub(r'[^a-z0-9_-]', '', name)
@@ -981,16 +980,16 @@ def create_vector_db(chunks, collection_name):
     if not chunks:
         logging.error("No chunks provided to create vector database")
         return None
-    
+
     # Ensure the vector DB directory exists
     os.makedirs(VECTOR_DB_DIR, exist_ok=True)    
     persist_dir = os.path.join(VECTOR_DB_DIR, collection_name)
     os.makedirs(persist_dir, exist_ok=True)
-    
+
     logging.info(f"Creating vector database in {persist_dir} with collection name {collection_name}")
     logging.info(f"Number of chunks: {len(chunks)}")
     logging.info(f"Chunks: {chunks}")
-    
+
     try:
         logging.info("Creating vector database...")
         vector_db = Chroma.from_documents(
@@ -1011,7 +1010,7 @@ def update_user_info_json(new_info, json_file=USER_INFO_JSON):
     """Update the user_info JSON file with new key-value pairs."""
     # Create directory if it doesn't exist
     os.makedirs(os.path.dirname(json_file), exist_ok=True)
-    
+
     if os.path.exists(json_file):
         try:
             with open(json_file, "r") as f:
@@ -1021,9 +1020,9 @@ def update_user_info_json(new_info, json_file=USER_INFO_JSON):
             user_info = {}
     else:
         user_info = {}
-    
+
     user_info.update(new_info)
-    
+
     try:
         with open(json_file, "w") as f:
             json.dump(user_info, f, indent=4)
@@ -1062,7 +1061,7 @@ def create_retriever(vector_db):
     if not vector_db:
         logging.error("No vector database provided for retriever creation")
         return None
-        
+
     try:
         retriever = vector_db.as_retriever()
         logging.info("Retriever created successfully.")
@@ -1086,23 +1085,23 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
         "zh": "请用中文回答。",
         "ar": "يرجى الرد باللغة العربية."
     }
-    
+
     language_instruction = language_instructions.get(language, language_instructions["en"])
     try:
         user_info_dict = json.loads(user_info) if isinstance(user_info, str) and user_info.strip() else user_info
     except Exception as e:
         logging.error(f"Error parsing user_info: {e}")
         return "I apologize, but I'm having trouble accessing your information. Please let me know how I can help you with the form."
-    
+
     logging.info(f"Question: {question}")
     logging.info(f"User info: {user_info}")
     logging.info(f"Chat history: {chat_history}")
     logging.info(f"New form: {new_form}")
     logging.info(f"Form fields: {form_fields}")
-    
+
     if new_form:
         new_form_context = "\n".join(doc.page_content for doc in new_form)
-    
+
         template = (
             "You are a friendly and helpful medical administrative assistant at a clinic. Your role is to help patients understand and complete their medical forms.\n\n"
             "LANGUAGE INSTRUCTION: {language_instruction}\n\n"
@@ -1134,7 +1133,7 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "QUESTION: {question}\n\n"
             "ANSWER (DO NOT USE ANY NESTED STRUCTURE IN JSON. USE ONLY FLAT, ONE-LEVEL JSON. ANSWER ONLY JSON, NOTHING ELSE):"
         ).format(new_form_context=new_form_context, user_info=user_info, chat_history=chat_history, question=question, language_instruction=language_instruction)
-        
+
         prompt_text = template
     else:
         base_prompt = (
@@ -1178,10 +1177,10 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             prompt_text += "Remember to provide the answer in this format all in one line: {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
 
         prompt_text = prompt_text.format(user_info=user_info, chat_history=chat_history, form_fields=form_fields, question=question, language_instruction=language_instruction)
-    
-    
+
+
     logging.info(f"Prompt text: {prompt_text}")
-    
+
     logging.info('Using OpenAI model for completion')
     # Use the OpenAI API to get the response. Edit later to handle conversation history properly.
     response = openai_client.chat.completions.create(
@@ -1194,11 +1193,11 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
         n=1,
         stop=None
     )
-    
+
     logging.info(f"OpenAI response: {response}")
-    
+
     response = response.choices[0].message.content.strip()
-    
+
     # response = llm.invoke(input=prompt_text)
     logging.info(f"LLM response: {response}")
     return response
@@ -1210,11 +1209,11 @@ def merge_user_info(current_info: dict, new_info: dict, llm) -> dict:
         return new_info.copy()
     if not new_info:
         return current_info.copy()
-    
+
     # Format the dictionaries for better LLM comprehension
     current_json = json.dumps(current_info, indent=2)
     new_json = json.dumps(new_info, indent=2)
-    
+
     # Create a prompt that asks the LLM to analyze both sets of fields at once
     prompt = f"""
 You are a data integration specialist tasked with merging user information from multiple sources. Your goal is to create an accurate, consolidated user profile.
@@ -1266,20 +1265,20 @@ Output: {{"mapping": {{"homeAddress": "address", "taxpayerID": "ssn", "employer"
 
 YOUR MAPPING OUTPUT:
 """
-    
+
     try:
         # Get the LLM's analysis
         response = llm.invoke(input=prompt)
         result_text = response.content.strip()
-        
+
         # Extract the JSON object (handle potential formatting issues)
         json_match = re.search(r'\{[\s\S]*\}', result_text)
         if not json_match:
             logging.warning("Could not extract JSON from LLM response, falling back to simple merge")
             return {**current_info, **new_info}
-            
+
         mapping_json = json_match.group(0)
-        
+
         try:
             mapping = json.loads(mapping_json)
         except json.JSONDecodeError as e:
@@ -1287,26 +1286,26 @@ YOUR MAPPING OUTPUT:
             # Try to fix common JSON issues
             mapping_json = mapping_json.replace("'", "\"")
             mapping_json = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', mapping_json)
-            
+
             try:
                 mapping = json.loads(mapping_json)
             except Exception as e2:
                 logging.error(f"Failed to fix mapping JSON: {e2}, falling back to simple merge")
                 return {**current_info, **new_info}
-        
+
         if "mapping" not in mapping:
             logging.warning("Invalid mapping format (no 'mapping' key), falling back to simple merge")
             return {**current_info, **new_info}
-            
+
         # Initialize the merged result with the current info
         merged = current_info.copy()
-        
+
         # Apply the mapping
         for new_field, current_field in mapping["mapping"].items():
             if new_field not in new_info:
                 logging.warning(f"Mapping includes '{new_field}', not in new_info. Skipping.")
                 continue
-                
+
             if current_field is not None:
                 if current_field in merged:
                     merged[current_field] = new_info[new_field]
@@ -1317,9 +1316,9 @@ YOUR MAPPING OUTPUT:
             else:
                 merged[new_field] = new_info[new_field]
                 logging.info(f"Added new field '{new_field}'")
-                
+
         return merged
-        
+
     except Exception as e:
         logging.error(f"Error in field mapping: {e}")
         # Fallback to simple merge in case of errors
@@ -1334,22 +1333,22 @@ def update_user_info_from_doc_fast(file_path, current_info: dict):
     if data is None:
         logging.error(f"Failed to ingest document from {file_path}")
         return current_info
-        
+
     chunks = split_documents(data)
     new_info = extract_key_value_info(chunks, None, None)  # Skip LLM for speed
     logging.info(f"New info extracted from document: {new_info}")
-    
+
     # Flatten the new info before merging
     flat_new_info = flatten_json(new_info)
     logging.info(f"Flattened new info: {flat_new_info}")
-    
+
     # Simple merge without LLM (faster)
     merged = {**current_info, **flat_new_info}
     update_user_info_json(merged)
-    
+
     # Skip vector DB creation for speed
     logging.info("Skipped vector DB creation for fast voice upload")
-    
+
     return merged
 
 def update_user_info_from_doc(file_path, llm, current_info: dict):
@@ -1361,19 +1360,19 @@ def update_user_info_from_doc(file_path, llm, current_info: dict):
     if data is None:
         logging.error(f"Failed to ingest document from {file_path}")
         return current_info
-        
+
     chunks = split_documents(data)
     new_info = extract_key_value_info(chunks, None, llm)
     logging.info(f"New info extracted from document: {new_info}")
-    
+
     # Flatten the new info before merging
     flat_new_info = flatten_json(new_info)
     logging.info(f"Flattened new info: {flat_new_info}")
-    
+
     # Use the efficient merging function
     merged = merge_user_info(current_info, flat_new_info, llm)
     update_user_info_json(merged)
-    
+
     # Create and persist a vector DB for the document
     filename = os.path.basename(file_path)
     collection_name = sanitize_collection_name(os.path.splitext(filename)[0])
@@ -1381,7 +1380,7 @@ def update_user_info_from_doc(file_path, llm, current_info: dict):
     if vector_db:
         vector_db_path = os.path.join(VECTOR_DB_DIR, collection_name)
         update_user_info_json({collection_name: vector_db_path})
-    
+
     return merged
 
 def update_user_info_from_conversation(text, llm, current_info: dict):
@@ -1391,18 +1390,18 @@ def update_user_info_from_conversation(text, llm, current_info: dict):
     if not text.strip():
         logging.warning("Empty conversation text provided, no update performed")
         return current_info
-        
+
     new_info = extract_key_value_info(None, text, llm)
     logging.info(f"New info extracted from conversation: {new_info}")
-    
+
     # Flatten the new info before merging
     flat_new_info = flatten_json(new_info)
     logging.info(f"Flattened new info: {flat_new_info}")
-    
+
     # Use the efficient merging function
     merged = merge_user_info(current_info, flat_new_info, llm)
     update_user_info_json(merged)
-    
+
     return merged
 
 def save_uploaded_file(file_content, file_name):
@@ -1410,10 +1409,10 @@ def save_uploaded_file(file_content, file_name):
     try:
         os.makedirs(UPLOADS_DIR, exist_ok=True)
         file_path = os.path.join(UPLOADS_DIR, file_name)
-        
+
         with open(file_path, "wb") as f:
             f.write(file_content)
-            
+
         logging.info(f"File saved successfully at: {file_path}")
         return file_path
     except Exception as e:
@@ -1427,31 +1426,31 @@ async def ingest_document(file: UploadFile = File(...)):
     try:
         logging.info(f"Processing file: {file.filename}")
         content = await file.read()
-        
+
         # Save the file
         file_path = save_uploaded_file(content, file.filename)
-        
+
         # Process document
         data, _ = ingest_file(file_path)
         if data is None:
             raise HTTPException(status_code=400, detail="Failed to ingest document")
-            
+
         chunks = split_documents(data)
         # llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
         key_value_info = extract_key_value_info(chunks, None, None)
-        
+
         # Flatten any nested structures before saving
         flat_key_value_info = flatten_json(key_value_info)
         update_user_info_json(flat_key_value_info)
-        
+
         # Create and store vector DB
         collection_name = sanitize_collection_name(os.path.splitext(file.filename)[0])
         vector_db = create_vector_db(chunks, collection_name)
-        
+
         if vector_db:
             vector_db_path = os.path.join(VECTOR_DB_DIR, collection_name)
             update_user_info_json({collection_name: vector_db_path})
-            
+
             return {
                 "status": "success",
                 "message": "Document processed successfully",
@@ -1511,15 +1510,15 @@ async def query_endpoint(
     try:
         # Load stored user info
         user_info = load_user_info()
-        
+
         # Format chat history if provided
         chat_history_formatted = ""
         if chatHistory:
             chat_history_formatted = format_chat_history(chatHistory)
-        
+
         # Initialize LLM
         # llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
-        
+
         if documentName:
             # If document is provided, load it
             logging.info(f"Processing document: {documentName}")
@@ -1529,7 +1528,7 @@ async def query_endpoint(
             data, _ = ingest_file(file_path)
             if data is None:
                 raise HTTPException(status_code=400, detail=f"Failed to load document: {documentName}")
-                
+
             response = answer_query(
                 None, 
                 message, 
@@ -1557,7 +1556,7 @@ async def query_endpoint(
                 allow_field_updates=allow_updates,
                 language=language
             )
-        
+
         return {"content": response}
     except Exception as e:
         logging.error(f"Error in query endpoint: {e}")
@@ -1574,9 +1573,9 @@ async def update_endpoint(
         current_info = load_user_info()
         if not current_info:
             current_info = {}
-            
+
         llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
-        
+
         if documentName:
             # Update via document
             file_path = os.path.join(UPLOADS_DIR, documentName)
@@ -1612,37 +1611,37 @@ async def process_blank_form(
     try:
         logging.info(f"Processing blank form: {file.filename}")
         content = await file.read()
-        
+
         # Save the file
         file_path = save_uploaded_file(content, file.filename)
-        
+
         sample_json = '{ "Employee social security number": "000-11-2222", \
         "Employer identification number": "999-888-777", \
         "Wages, tips, other compensation": "64000" }'
-        
+
         questionPrompt = f"You are a helpful, form-filling assistant. The user will provide you with an image of a blank or partially-filled form. For each field, your task is to generate the answer to the question, 'What is the value of the field?' and add the field label and its answer as a key-value pair to a .JSON file. If the answer to the field is not already in the form, check if you can find the answer in the chat history. Here is an example response: {sample_json} ONLY RESPOND WITH THE OUTPUT OF A .JSON FILE WITH NO ADDITIONAL TEXT"
-        
+
         # Initialize LLM
         llm = ChatOllama(model=MODEL_NAME, temperature=0.1)
-        
+
         # Process the form
         data, _ = ingest_file(file_path)
         if data is None:
             raise HTTPException(status_code=400, detail="Failed to process blank form")
-            
+
         # Use query to extract fields
         response = answer_query(llm, questionPrompt, new_form=data)
         jsonString = response
-        
+
         logging.info(f"Raw JSON string: {jsonString}")
-        
+
         # Parse the JSON string if it's in the {"response": "..."} format
         try:
             parsedOutput = json.loads(jsonString)
             if "response" in parsedOutput:
                 # Extract the inner JSON string
                 jsonString = parsedOutput["response"]
-                
+
                 # If the inner string is escaped JSON, parse it again to clean it up
                 try:
                     innerJson = json.loads(jsonString)
@@ -1655,20 +1654,20 @@ async def process_blank_form(
                 jsonString = json.dumps(parsedOutput)
         except:
             logging.info('Output is not in {"response": "..."} format, using as is')
-        
+
         # Create a temporary JSON file for the filled form data
         jsonFilePath = os.path.join(UPLOADS_DIR, "temp_form_data.json")
         with open(jsonFilePath, "w") as f:
             f.write(jsonString)
-        
+
         # Get the filled PDF path - it should be the same as original but with "_filled.pdf" suffix
         # outputPath = file_path.replace(/\.[^/.]+$/, '') + '_filled.pdf'
         outputPath = file_path.replace(r"\.[^/.]+$", '') + '_filled.pdf'
-        
+
         # Run write_pdf.py to fill the form
         # Note: This would need to be implemented separately as a function
         # For now, we'll just return the JSON data
-        
+
         return {
             "message": "Blank form processed successfully",
             "fields": jsonString,
@@ -1685,10 +1684,10 @@ async def update_form_values(request: FormValuesRequest):
         # Create directory if it doesn't exist
         form_values_path = os.path.join(UPLOADS_DIR, "form_values.json")
         os.makedirs(os.path.dirname(form_values_path), exist_ok=True)
-        
+
         with open(form_values_path, "w") as f:
             json.dump(request.values, f, indent=2)
-            
+
         return {
             "message": "Form values updated successfully",
             "values": request.values
@@ -1741,12 +1740,12 @@ async def detect_document_endpoint(file: UploadFile = File(...)):
     try:
         # Read image bytes
         image_bytes = await file.read()
-        
+
         # Detect document boundaries
         result = detect_document_boundaries(image_bytes)
-        
+
         return result
-        
+
     except Exception as e:
         logging.error(f"Error detecting document: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1757,42 +1756,42 @@ async def process_camera_image_endpoint(file: UploadFile = File(...)):
     try:
         # Read image bytes
         image_bytes = await file.read()
-        
+
         # Enhance image quality
         enhanced_image = enhance_document_image(image_bytes)
-        
+
         # Extract form structure from blank form
         form_fields = process_camera_image_for_form_structure(enhanced_image)
-        
+
         if not form_fields:
             return {"success": False, "message": "No form fields could be detected in the image"}
-        
+
         # Create the curr_form.json structure
         form_structure = {
             "title": "Scanned Form",
             "description": "Form generated from camera scan",
             "fields": form_fields
         }
-        
+
         # Save to mockups/frontend2/temp/curr_form.json
         curr_form_path = os.path.join('mockups', 'frontend2', 'temp', 'curr_form.json')
-        
+
         # Ensure the temp directory exists
         os.makedirs(os.path.dirname(curr_form_path), exist_ok=True)
-        
+
         # Write the form structure
         with open(curr_form_path, 'w') as f:
             json.dump(form_structure, f, indent=2)
-        
+
         logging.info(f"Created curr_form.json with {len(form_fields)} fields at {curr_form_path}")
-        
+
         return {
             "success": True,
             "message": f"Successfully created form with {len(form_fields)} fields",
             "form_path": curr_form_path,
             "form_structure": form_structure
         }
-        
+
     except Exception as e:
         logging.error(f"Error processing camera image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1908,63 +1907,63 @@ async def handle_voice_file_upload(upload_request: dict) -> dict:
         search_locations = []
         if upload_request.get("file_location"):
             search_locations.append(upload_request["file_location"])
-        
+
         # Add common locations as fallback
         search_locations.extend([
             "~/Desktop", "~/Downloads", "~/Documents", 
             ".", "./uploads"  # Current directory and uploads folder
         ])
-        
+
         # Search for PDF files
         found_files = []
         for location in search_locations:
             pdf_files = voice_helper.find_pdf_files(location, upload_request.get("doc_type"))
             found_files.extend(pdf_files)
-        
+
         if not found_files:
             locations_str = ", ".join([loc.replace("~/", "your ") for loc in search_locations[:3]])
             return {
                 "success": False,
                 "message": f"I couldn't find any PDF files in {locations_str}. Please make sure the file exists and try again."
             }
-        
+
         # Select the best match
         selected_file = voice_helper.select_best_pdf_match(found_files, upload_request)
-        
+
         if not selected_file:
             return {
                 "success": False,
                 "message": "I found some PDF files but couldn't determine which one you meant. Please be more specific."
             }
-        
+
         # Copy the file to uploads directory
         import shutil
         filename = os.path.basename(selected_file)
         destination_path = os.path.join(UPLOADS_DIR, filename)
-        
+
         # Ensure uploads directory exists
         os.makedirs(UPLOADS_DIR, exist_ok=True)
-        
+
         # Copy the file
         shutil.copy2(selected_file, destination_path)
-        
+
         # Generate response message
         doc_type_str = upload_request.get("doc_type", "document")
         location_str = upload_request.get("file_location", "") or ""
-        
+
         if location_str:
             location_str = location_str.replace("~/", "your ")
             message = f"I found and uploaded the {doc_type_str} '{filename}' from {location_str}."
         else:
             message = f"I found and uploaded the {doc_type_str} '{filename}'."
-        
+
         return {
             "success": True,
             "message": message,
             "file_path": destination_path,
             "filename": filename
         }
-        
+
     except Exception as e:
         logging.error(f"Voice file upload error: {e}")
         return {
@@ -1982,10 +1981,10 @@ async def voice_ws(websocket: WebSocket):
     conversation = []  # type: list[dict[str, str]]
 
     audio_chunks: list[bytes] = []
-    
+
     # Store form fields for context (will be sent by frontend)
     current_form_fields = None
-    
+
     # Store user's selected language (default to English)
     selected_language = "en"
 
@@ -1997,7 +1996,7 @@ async def voice_ws(websocket: WebSocket):
             if "bytes" in msg and msg["bytes"] is not None:
                 audio_data = msg["bytes"]
                 logging.debug("voice_ws: received %d audio bytes", len(audio_data))
-                
+
                 # For the new single-blob approach, we expect larger chunks
                 if len(audio_data) > 1000:  # Substantial audio data
                     audio_chunks = [audio_data]  # Replace any previous chunks
@@ -2009,7 +2008,7 @@ async def voice_ws(websocket: WebSocket):
             # Text frame acts as control; expect "END" to delimit utterance
             if "text" in msg and msg["text"]:
                 text_msg = msg["text"].strip()
-                
+
                 # Check for form fields update
                 if text_msg.startswith("FORM_FIELDS:"):
                     try:
@@ -2020,7 +2019,7 @@ async def voice_ws(websocket: WebSocket):
                     except Exception as e:
                         logging.error("voice_ws: error parsing form fields: %s", e)
                         continue
-                
+
                 # Check for language preference update
                 if text_msg.startswith("LANGUAGE:"):
                     try:
@@ -2031,7 +2030,7 @@ async def voice_ws(websocket: WebSocket):
                     except Exception as e:
                         logging.error("voice_ws: error parsing language: %s", e)
                         continue
-                
+
                 if text_msg.upper() != "END":
                     # Ignore other control messages for now
                     continue
@@ -2062,13 +2061,13 @@ async def voice_ws(websocket: WebSocket):
                 try:
                     transcript = voice_helper.transcribe(audio_bytes)
                     logging.info("voice_ws: transcript='%s'", transcript)
-                    
+
                     # Check if transcription failed or is empty
                     if not transcript or transcript.strip() in ["[No speech detected]", "[Transcription failed", ""] or transcript.startswith("[Transcription failed"):
                         logging.warning("voice_ws: transcription failed or empty")
                         await websocket.send_json({"type": "error", "content": "Could not understand the audio. Please try speaking more clearly."})
                         continue
-                        
+
                 except Exception as e:
                     logging.error("voice_ws: ASR exception: %s", e)
                     await websocket.send_json({"type": "error", "content": f"ASR failed: {e}"})
@@ -2079,26 +2078,26 @@ async def voice_ws(websocket: WebSocket):
 
                 # Check if this is a file upload request
                 upload_request = voice_helper.detect_file_upload_request(transcript)
-                
+
                 if upload_request["is_upload_request"]:
                     # Handle voice-controlled file upload
                     try:
                         upload_result = await handle_voice_file_upload(upload_request)
-                        
+
                         if upload_result["success"]:
                             # File uploaded successfully - provide feedback
                             reply_text = upload_result["message"]
-                            
+
                             # Process the uploaded file through existing RAG pipeline
                             file_path = upload_result["file_path"]
                             filename = os.path.basename(file_path)
-                            
+
                             # Ingest the file into the RAG system
                             data, _ = ingest_file(file_path)
-                            
+
                             if data:
                                 reply_text += f" The document has been processed and is now available for questions. You can ask me about the contents of {filename}."
-                                
+
                                 # Update user info from the document (faster than vector DB)
                                 try:
                                     current_info = load_user_info() or {}
@@ -2107,14 +2106,14 @@ async def voice_ws(websocket: WebSocket):
                                         reply_text += " I've also updated your personal information based on the document contents."
                                 except Exception as e:
                                     logging.warning(f"Could not update user info from uploaded document: {e}")
-                                
+
                                 # AUTO-FILL: Automatically try to fill form fields after successful upload
                                 if current_form_fields:
                                     try:
                                         auto_fill_message = "Fill out any form fields you can from the uploaded document. Only include fields you have actual data for - do NOT include fields with placeholder or missing values."
 
                                         # TODO: How do we figure out when to autofill? Because the user will never ask for it. They will expect it.
-                                        
+
                                         auto_fill_response = answer_query(
                                             None,
                                             auto_fill_message,
@@ -2123,27 +2122,27 @@ async def voice_ws(websocket: WebSocket):
                                             form_fields=current_form_fields,
                                             language=selected_language
                                         )
-                                        
+
                                         # Check if auto-fill response contains field updates
                                         field_updates_match = re.search(r'\{[\'"]field_updates[\'"]:\s*\[[\s\S]*?\]\}', auto_fill_response)
                                         if field_updates_match:
                                             # Append the field updates to the main response so frontend can process them
                                             reply_text += " " + field_updates_match.group(0)
                                             logging.info(f"Voice upload: Auto-fill generated field updates: {field_updates_match.group(0)}")
-                                        
+
                                     except Exception as e:
                                         logging.warning(f"Voice upload auto-fill failed: {e}")
-                                
+
                             else:
                                 reply_text += " However, there was an issue processing the document content. You may need to upload it again."
                         else:
                             # File upload failed
                             reply_text = upload_result["message"]
-                            
+
                     except Exception as e:
                         logging.error(f"Voice file upload error: {e}")
                         reply_text = f"I encountered an error while trying to upload the file: {str(e)}"
-                        
+
                 else:
                     # Regular query processing (existing logic)
                     # Determine intent & call existing endpoints directly (function)
@@ -2212,7 +2211,7 @@ async def voice_ws(websocket: WebSocket):
                 await websocket.send_json({"type": "error", "content": "Voice processing error occurred"})
         except Exception as send_error:
             logging.error("voice_ws: Failed to send error message: %s", send_error)
-        
+
         # Try to close connection gracefully
         try:
             if websocket.application_state not in [WebSocketState.DISCONNECTED, WebSocketState.DISCONNECTING]:
@@ -2227,15 +2226,15 @@ def clean_response_for_voice(response_text: str) -> str:
     """
     # Extract field updates JSON (same regex as frontend)
     field_updates_match = re.search(r'\{[\'"]field_updates[\'"]:\s*\[[\s\S]*?\]\}', response_text)
-    
+
     if field_updates_match:
         # Remove the field updates JSON from the response
         cleaned_response = response_text.replace(field_updates_match.group(0), "").strip()
-        
+
         # Clean up any redundant text that might be left
         cleaned_response = re.sub(r'\s*Based on the information I have, I was able to fill out some of the form for you!\s*', '', cleaned_response)
         cleaned_response = re.sub(r'\s*Here\'s the updated information:\s*', '', cleaned_response)
-        
+
         # If we're left with an empty response after cleaning, provide a fallback
         if not cleaned_response.strip():
             # Check if there were field updates
@@ -2244,26 +2243,26 @@ def clean_response_for_voice(response_text: str) -> str:
                 field_updates_string = field_updates_match.group(0).replace("'", '"')
                 updates_obj = json.loads(field_updates_string)
                 field_updates = updates_obj.get('field_updates', [])
-                
+
                 if field_updates:
                     return f"I've updated {len(field_updates)} field{'s' if len(field_updates) != 1 else ''} in your form for you."
                 else:
                     return "Yes, I can hear you perfectly! I'm here to help you with your medical form. What would you like me to help you with?"
             except:
                 return "Yes, I can hear you perfectly! I'm here to help you with your medical form. What would you like me to help you with?"
-        
+
         return cleaned_response
-    
+
     # If no JSON found, return the original response (but ensure it's not empty)
     if not response_text.strip():
         return "Yes, I can hear you perfectly! I'm here to help you with your medical form. What would you like me to help you with?"
-    
+
     return response_text
 
 if __name__ == "__main__":
     # Create required directories
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     os.makedirs(VECTOR_DB_DIR, exist_ok=True)
-    
+
     # Run the FastAPI app
     uvicorn.run(app, host="0.0.0.0", port=8000)
