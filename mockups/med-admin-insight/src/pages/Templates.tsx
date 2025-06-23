@@ -137,7 +137,58 @@ export default function Templates() {
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string>("");
+  const [isInPreviewMode, setIsInPreviewMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper function to save uploaded template to form-templates folder
+  const saveUploadedTemplateToFile = async (template: TemplateData, fields: FormField[]) => {
+    try {
+      // Generate a proper template ID from the template name (kebab-case)
+      const templateId = template.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      
+      // Create a clean template object for saving (remove temporary properties)
+      const templateToSave = {
+        id: templateId,
+        name: template.name,
+        category: template.category,
+        uses: template.uses,
+        pdfUrl: `/api/pdf/${templateId}`, // Use the server PDF URL
+        description: template.description,
+        tags: template.tags,
+        version: template.version,
+        lastEditedBy: template.lastEditedBy,
+        lastEditedOn: template.lastEditedOn,
+        fields: JSON.stringify(fields, null, 2) // Save fields as stringified JSON
+      };
+
+      // Save to form-templates directory
+      const response = await fetch('/api/save-template', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId: templateToSave.id,
+          data: templateToSave
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save template');
+      }
+
+      console.log(`Template saved: ${templateToSave.id}`);
+      
+      // Return the final template ID so we can update the state
+      return templateId;
+    } catch (error) {
+      console.error('Error saving uploaded template:', error);
+      return null;
+    }
+  };
 
   // Helper function to save template data back to JSON file
   const saveTemplateToFile = async (templateId: string, updatedData: any) => {
@@ -262,10 +313,8 @@ export default function Templates() {
             : t
         ));
         
-        // Reload templates to ensure we have the latest data
-        setTimeout(() => {
-          reloadTemplates();
-        }, 1000);
+        // Don't reload templates automatically as it can cause the preview to disappear
+        // The local state update above is sufficient
         
         setSaveStatus("Changes saved successfully!");
         setTimeout(() => setSaveStatus(""), 3000);
@@ -322,20 +371,10 @@ export default function Templates() {
   const handleUseTemplate = async (template: TemplateData) => {
     setSelectedPdfUrl(template.pdfUrl);
     setSelectedTemplateId(template.id);
+    setIsInPreviewMode(true);
     
-    // For regular templates (not uploaded), refresh the template data to get the latest fields
-    if (!template.id.startsWith("uploaded-")) {
-      try {
-        // Reload templates to get the latest data from disk
-        const updatedTemplates = await loadTemplatesFromJson();
-        const updatedTemplate = updatedTemplates.find(t => t.id === template.id);
-        if (updatedTemplate) {
-          template = updatedTemplate; // Use the updated template data
-        }
-      } catch (error) {
-        console.error("Error refreshing template data:", error);
-      }
-    }
+    // Don't reload templates here as it can cause the preview to disappear
+    // The template data in state should be sufficient
     
     // If the template has fields data, process it
     if (template.fields) {
@@ -446,6 +485,7 @@ export default function Templates() {
   const handleBackToTemplates = () => {
     setSelectedPdfUrl(null);
     setSelectedTemplateId(null);
+    setIsInPreviewMode(false);
   };
 
   const handleProceed = () => {
@@ -457,19 +497,25 @@ export default function Templates() {
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type === "application/pdf") {
-      // Create object URL immediately
+      // Create object URL immediately for preview
       const objectUrl = URL.createObjectURL(file);
       const fileNameWithoutExtension = file.name.replace(/\.pdf$/i, "");
       
+      // Generate a proper template ID (kebab-case)
+      const templateId = fileNameWithoutExtension
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      
       // Create and add new template immediately
       const newTemplate: TemplateData = {
-        id: `uploaded-${Date.now()}`,
+        id: `uploaded-${Date.now()}`, // Keep uploaded- prefix for temporary state
         name: fileNameWithoutExtension,
         category: "Other",
         uses: 0,
-        pdfUrl: objectUrl,
-        description: "Uploaded PDF form.",
-        tags: ["uploaded"],
+        pdfUrl: objectUrl, // Use object URL for immediate preview
+        description: `Uploaded PDF form: ${fileNameWithoutExtension}`,
+        tags: ["uploaded", "pdf"],
         signatureFields: [],
         version: 1,
         lastEditedBy: { name: "Current User" },
@@ -482,6 +528,7 @@ export default function Templates() {
       setTemplates((prevTemplates) => [newTemplate, ...prevTemplates]);
       setSelectedPdfUrl(objectUrl);
       setSelectedTemplateId(newTemplate.id);
+      setIsInPreviewMode(true);
       setIsProcessing(true);
 
       try {
@@ -493,19 +540,57 @@ export default function Templates() {
         const fields = processFormData(response.extracted_info);
         setExtractedFields(fields);
         
-        // Save the initial template with extracted fields in new format
-        const templateWithFields = {
-          ...newTemplate,
-          fields: JSON.stringify(fields, null, 2) // Save as stringified JSON
-        };
+        // Save the uploaded template to form-templates folder
+        const finalTemplateId = await saveUploadedTemplateToFile(newTemplate, fields);
         
-        // Update the template in state with fields
-        setTemplates(prev => prev.map(t => 
-          t.id === newTemplate.id 
-            ? { ...t, fields: JSON.stringify(fields, null, 2) }
-            : t
-        ));
-        
+        if (finalTemplateId) {
+          // Save the PDF file to server
+          const pdfArrayBuffer = await file.arrayBuffer();
+          const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfArrayBuffer)));
+          
+          const pdfResponse = await fetch('/api/save-pdf', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              templateId: finalTemplateId,
+              pdfData: pdfBase64,
+              fileName: file.name
+            })
+          });
+
+          if (pdfResponse.ok) {
+            const pdfData = await pdfResponse.json();
+            
+            // Update the selected template ID and PDF URL FIRST
+            setSelectedTemplateId(finalTemplateId);
+            setSelectedPdfUrl(pdfData.pdfUrl);
+            
+            // Then update the template in state with the final ID and proper PDF URL
+            setTemplates(prev => prev.map(t => 
+              t.id === newTemplate.id 
+                ? { 
+                    ...t, 
+                    id: finalTemplateId, 
+                    fields: JSON.stringify(fields, null, 2),
+                    pdfUrl: pdfData.pdfUrl // Use the server URL
+                  }
+                : t
+            ));
+            
+            console.log(`Template ID updated: ${newTemplate.id} -> ${finalTemplateId}`);
+            console.log(`PDF URL updated: ${objectUrl} -> ${pdfData.pdfUrl}`);
+            
+            setSaveStatus("Template saved successfully!");
+            setTimeout(() => setSaveStatus(""), 3000);
+          } else {
+            console.error('Failed to save PDF file');
+            setSaveStatus("Template saved but PDF file failed to save");
+          }
+        } else {
+          setSaveStatus("Error saving template");
+        }
       } catch (error) {
         console.error("Error processing PDF:", error);
         alert("Error processing PDF. Please try again.");
@@ -560,7 +645,7 @@ export default function Templates() {
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 md:p-8">
-          {selectedPdfUrl ? (
+          {isInPreviewMode && selectedPdfUrl ? (
             <div className="bg-white p-6 rounded-xl shadow-lg">
               <Button
                 variant="outline"

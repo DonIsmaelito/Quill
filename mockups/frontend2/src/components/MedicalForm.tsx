@@ -5,6 +5,61 @@ import { Card } from '@/components/ui/card';
 import FormReview from './FormReview';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
+// Import the DigitizedForm component from med-admin-insight
+import { DigitizedForm } from '../../../med-admin-insight/src/components/DigitizedForm';
+// Import the processFormData function from med-admin-insight
+import { processFormData } from '../../../med-admin-insight/src/utils/formProcessing';
+
+// Import the FormField type from med-admin-insight
+interface FormField {
+  id: string;
+  type: "text" | "checkbox" | "radio" | "select" | "date" | "signature" | "table";
+  label: string;
+  required: boolean;
+  value?: string | boolean;
+  options?: string[];
+  placeholder?: string;
+  columns?: Array<{
+    id: string;
+    label: string;
+    type: "text" | "checkbox" | "date";
+    value: string | boolean;
+  }>;
+  validation?: {
+    pattern?: string;
+    min?: number;
+    max?: number;
+  };
+  position: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+interface TableField {
+  id: string;
+  type: "text" | "checkbox" | "radio" | "select" | "date" | "signature";
+  label: string;
+  value: string | boolean;
+}
+
+// Helper function to determine field type from key
+const getFieldType = (key: string): FormField["type"] => {
+  if (key.startsWith("text")) return "text";
+  if (key.startsWith("boolean")) return "checkbox";
+  if (key.startsWith("date")) return "date";
+  return "text"; // default to text
+};
+
+// Helper function to determine column type from key (for table fields)
+const getColumnType = (key: string): "text" | "checkbox" | "radio" | "select" | "date" | "signature" => {
+  if (key.startsWith("text")) return "text";
+  if (key.startsWith("date")) return "date";
+  if (key.startsWith("boolean")) return "checkbox";
+  return "text"; // default to text
+};
 
 interface FormData {
   [key: string]: any;
@@ -39,6 +94,320 @@ interface MedicalFormProps {
   onTemplateFieldsLoaded?: (fields: FieldConfig[], formValues: Record<string, any>) => void;
 }
 
+// Patient-specific form rendering component (no editing features)
+interface PatientFormRendererProps {
+  fields: FormField[];
+  formValues: Record<string, any>;
+  onFieldChange: (id: string, value: any) => void;
+  highlightedFields?: string[];
+}
+
+const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
+  fields,
+  formValues,
+  onFieldChange,
+  highlightedFields = []
+}) => {
+  let isFirstHeader = true;
+
+  const renderField = (field: FormField) => {
+    // Check if this is a header field (based on width and height)
+    const isHeader = field.position.width === 600 && (field.position.height === 48 || field.position.height === 36);
+    const isSubheader = field.position.height === 36;
+
+    if (isHeader) {
+      const headerElement = (
+        <div key={field.id} className={`${isSubheader ? 'mt-8' : 'mt-12'} mb-6`}>
+          {!isSubheader && !isFirstHeader && <hr className="border-blue-200 mb-6" />}
+          <h2 className={`font-semibold ${isSubheader ? 'text-lg text-gray-700' : 'text-2xl text-blue-600'}`}>
+            {field.label}
+          </h2>
+          {isSubheader && <hr className="border-blue-100 mt-2" />}
+        </div>
+      );
+      
+      if (!isSubheader) {
+        isFirstHeader = false;
+      }
+      
+      return headerElement;
+    }
+
+    // Check if this is a table field (based on width and height, or if it contains table data)
+    const isTable = (field.position.width === 600 && field.position.height === 200) || 
+                   (field.value && typeof field.value === 'string' && field.value.startsWith('['));
+    
+    if (isTable) {
+      try {
+        const tableFields: any[] = typeof field.value === 'string' ? JSON.parse(field.value) : [];
+        return (
+          <div key={field.id} className="mb-6">
+            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-2">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      {tableFields.map((col: any) => (
+                        <th key={col.id} className="bg-gray-50 text-gray-700 font-medium text-center whitespace-nowrap px-4 py-2">
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {tableFields.map((col: any) => (
+                        <td key={col.id} className="bg-white whitespace-nowrap px-4 py-2">
+                          {col.type === "checkbox" ? (
+                            <div className="flex justify-center">
+                              <input 
+                                type="checkbox"
+                                checked={col.value as boolean} 
+                                onChange={(e) => {
+                                  const newValue = e.target.checked;
+                                  const updatedFields = tableFields.map((f: any) => 
+                                    f.id === col.id ? { ...f, value: newValue } : f
+                                  );
+                                  onFieldChange(field.id, JSON.stringify(updatedFields));
+                                }}
+                                className="border-2 border-gray-300 rounded focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                              />
+                            </div>
+                          ) : col.type === "date" ? (
+                            <input 
+                              type="date" 
+                              value={col.value as string} 
+                              onChange={(e) => {
+                                const newValue = e.target.value;
+                                const updatedFields = tableFields.map((f: any) => 
+                                  f.id === col.id ? { ...f, value: newValue } : f
+                                );
+                                onFieldChange(field.id, JSON.stringify(updatedFields));
+                              }}
+                              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-2 py-1 rounded bg-white"
+                            />
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={col.value as string} 
+                              onChange={(e) => {
+                                const newValue = e.target.value;
+                                const updatedFields = tableFields.map((f: any) => 
+                                  f.id === col.id ? { ...f, value: newValue } : f
+                                );
+                                onFieldChange(field.id, JSON.stringify(updatedFields));
+                              }}
+                              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-2 py-1 rounded bg-white"
+                            />
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      } catch (e) {
+        console.error("Error parsing table data:", e);
+        return null;
+      }
+    }
+
+    // For regular fields, render appropriate input types
+    switch (field.type) {
+      case "text":
+        return (
+          <div key={field.id} className="mb-4">
+            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              id={field.id}
+              type="text"
+              placeholder={field.placeholder}
+              required={field.required}
+              value={formValues[field.id] || ''}
+              onChange={(e) => onFieldChange(field.id, e.target.value)}
+              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-3 py-2 rounded-md bg-white"
+              data-highlighted={highlightedFields.includes(field.id)}
+            />
+          </div>
+        );
+      case "checkbox":
+        return (
+          <div key={field.id} className="flex items-center space-x-2 mb-4">
+            <input 
+              id={field.id} 
+              type="checkbox"
+              required={field.required} 
+              checked={formValues[field.id] as boolean || false} 
+              onChange={(e) => onFieldChange(field.id, e.target.checked)}
+              className="border-2 border-gray-300 rounded focus:ring-2 focus:ring-blue-200 focus:border-blue-400" 
+            />
+            <label htmlFor={field.id} className="text-sm font-medium text-gray-700">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+          </div>
+        );
+      case "radio":
+        return (
+          <div key={field.id} className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <div className="space-y-2">
+              {field.options?.map((option) => (
+                <div key={option} className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id={`${field.id}-${option}`}
+                    name={field.id}
+                    value={option}
+                    required={field.required}
+                    checked={formValues[field.id] === option}
+                    onChange={(e) => onFieldChange(field.id, e.target.value)}
+                    className="border-2 border-gray-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                  />
+                  <label htmlFor={`${field.id}-${option}`} className="text-sm text-gray-700">
+                    {option}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case "select":
+        return (
+          <div key={field.id} className="mb-4">
+            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <select
+              id={field.id}
+              required={field.required}
+              value={formValues[field.id] || ''}
+              onChange={(e) => onFieldChange(field.id, e.target.value)}
+              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-3 py-2 rounded-md bg-white"
+            >
+              <option value="">{field.placeholder || "Select an option"}</option>
+              {field.options?.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      case "date":
+        return (
+          <div key={field.id} className="mb-4">
+            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              id={field.id}
+              type="date"
+              required={field.required}
+              value={formValues[field.id] || ''}
+              onChange={(e) => onFieldChange(field.id, e.target.value)}
+              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-3 py-2 rounded-md bg-white"
+            />
+          </div>
+        );
+      case "signature":
+        return (
+          <div key={field.id} className="mb-4">
+            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-gray-300 transition-colors">
+              <p className="text-sm text-gray-500">Click to sign</p>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Render fields with proper layout
+  const regularFields: FormField[] = [];
+  const fullWidthElements: React.ReactNode[] = [];
+  
+  fields.forEach(field => {
+    const isHeader = field.position.width === 600 && (field.position.height === 48 || field.position.height === 36);
+    const isTable = (field.position.width === 600 && field.position.height === 200) || 
+                   (field.value && typeof field.value === 'string' && field.value.startsWith('['));
+    
+    if (isHeader || isTable) {
+      fullWidthElements.push(renderField(field));
+    } else {
+      regularFields.push(field);
+    }
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Render all fields in their original order to maintain hierarchy */}
+      {(() => {
+        const elements: React.ReactNode[] = [];
+        let currentGridFields: FormField[] = [];
+        
+        fields.forEach(field => {
+          const isHeader = field.position.width === 600 && (field.position.height === 48 || field.position.height === 36);
+          const isTable = (field.position.width === 600 && field.position.height === 200) || 
+                         (field.value && typeof field.value === 'string' && field.value.startsWith('['));
+          
+          if (isHeader || isTable) {
+            // If we have accumulated regular fields, render them in a grid first
+            if (currentGridFields.length > 0) {
+              elements.push(
+                <div key={`grid-${currentGridFields[0].id}`} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {currentGridFields.map(field => renderField(field))}
+                </div>
+              );
+              currentGridFields = [];
+            }
+            
+            // Render the header or table as full-width
+            elements.push(
+              <div key={field.id} className="w-full">
+                {renderField(field)}
+              </div>
+            );
+          } else {
+            // Accumulate regular fields for grid rendering
+            currentGridFields.push(field);
+          }
+        });
+        
+        // Render any remaining regular fields in a grid
+        if (currentGridFields.length > 0) {
+          elements.push(
+            <div key={`grid-${currentGridFields[0].id}`} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {currentGridFields.map(field => renderField(field))}
+            </div>
+          );
+        }
+        
+        return elements;
+      })()}
+    </div>
+  );
+};
+
 const MedicalForm: React.FC<MedicalFormProps> = ({ 
   uploadedFiles = [], 
   fields: propFields = [], 
@@ -53,7 +422,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   const [searchParams] = useSearchParams();
   
   // State for template-based form
-  const [templateFields, setTemplateFields] = useState<FieldConfig[]>([]);
+  const [templateFields, setTemplateFields] = useState<FormField[]>([]);
   const [templateFormValues, setTemplateFormValues] = useState<Record<string, any>>({});
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState<string>('');
@@ -86,35 +455,38 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
       setTemplateName(template.name || `Template: ${id}`);
       
       // Parse the fields from the template
-      let fields: any[] = [];
+      let fields: FormField[] = [];
       if (template.fields) {
         if (typeof template.fields === 'string') {
+          // New format: fields is a stringified FormField array
           fields = JSON.parse(template.fields);
         } else {
-          fields = template.fields;
+          // Old format: fields is a hierarchical object, need to process it
+          fields = processFormData(template.fields);
         }
       }
       
       console.log('Parsed fields:', fields);
       
-      // Convert FormField format to FieldConfig format
-      const fieldConfigs: FieldConfig[] = fields.map((field: any) => ({
+      // Initialize form values
+      const initialValues: Record<string, any> = {};
+      fields.forEach(field => {
+        initialValues[field.id] = field.value || '';
+      });
+      
+      setTemplateFields(fields);
+      setTemplateFormValues(initialValues);
+      
+      // Convert FormField format to FieldConfig format for backward compatibility
+      const fieldConfigs: FieldConfig[] = fields.map((field: FormField) => ({
         id: field.id,
         label: field.label,
         type: field.type as FieldType,
         required: field.required || false,
         placeholder: field.placeholder || '',
-        value: field.value || ''
+        value: field.value || '',
+        options: field.options?.map(opt => ({ value: opt, label: opt })) || []
       }));
-      
-      setTemplateFields(fieldConfigs);
-      
-      // Initialize form values
-      const initialValues: Record<string, any> = {};
-      fieldConfigs.forEach(field => {
-        initialValues[field.id] = field.value || '';
-      });
-      setTemplateFormValues(initialValues);
       
       // Notify parent component about the loaded fields
       if (onTemplateFieldsLoaded) {
@@ -198,7 +570,8 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
           label: field.label,
           type: field.type,
           value: formValues[field.id],
-          required: field.required
+          required: field.required,
+          position: field.position
         })),
         formValues: formValues
       };
@@ -263,12 +636,12 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
     setReviewOpen(false);
   };
 
-  const reviewFields = fields.map(field => ({
+  const reviewFields = (templateId && templateFields.length > 0 ? templateFields : fields as any[]).map(field => ({
     id: field.id,
     label: field.label,
     value: formValues[field.id],
-    autofilled: field.autofilled,
-    autofillSource: field.autofillSource
+    autofilled: false,
+    autofillSource: ""
   }));
 
   if (isLoadingTemplate) {
@@ -301,25 +674,38 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
         </p>
       </div>
       <form onSubmit={handleSubmit} className="p-8">
-        <div ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {fields.map(field => (
-            <FormField
-              key={field.id}
-              id={field.id}
-              label={field.label}
-              type={field.type}
-              options={field.options}
-              placeholder={field.placeholder}
-              value={formValues[field.id]}
-              autofilled={field.autofilled}
-              autofillSource={field.autofillSource}
-              unfillable={field.unfillable}
-              required={field.required}
-              onChange={handleFieldChange}
-              isHighlighted={highlightedFields.includes(field.id)}
-              data-highlighted={highlightedFields.includes(field.id)}
+        <div ref={formRef}>
+          {templateId && templateFields.length > 0 ? (
+            // Use the PatientFormRenderer for template-based forms
+            <PatientFormRenderer
+              fields={templateFields}
+              formValues={templateFormValues}
+              onFieldChange={handleFieldChange}
+              highlightedFields={highlightedFields}
             />
-          ))}
+          ) : (
+            // Use the original FormField components for prop-based forms
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {fields.map(field => (
+                <FormField
+                  key={field.id}
+                  id={field.id}
+                  label={field.label}
+                  type={field.type}
+                  options={field.options}
+                  placeholder={field.placeholder}
+                  value={formValues[field.id]}
+                  autofilled={field.autofilled}
+                  autofillSource={field.autofillSource}
+                  unfillable={field.unfillable}
+                  required={field.required}
+                  onChange={handleFieldChange}
+                  isHighlighted={highlightedFields.includes(field.id)}
+                  data-highlighted={highlightedFields.includes(field.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex justify-between mt-10 pt-6 border-t border-gray-100 dark:border-gray-800">
           <Button

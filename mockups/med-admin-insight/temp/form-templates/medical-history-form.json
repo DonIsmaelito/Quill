@@ -1,16 +1,19 @@
 {
-      "id": "medical-history-form",
-      "name": "Medical History Form",
-      "category": "Clinical",
-      "uses": 142,
-      "pdfUrl": "Medical_History_Form.pdf",
-      "description":
-        "Comprehensive medical history questionnaire for clinical assessment.",
-      "tags": ["history", "clinical assessment", "medical record"],
-      "version": 2,
-      "lastEditedBy": [
-        { "name": "Bob Williams" }
-      ],
-      "lastEditedOn": "2023-10-15T12:00:00Z",
-      "fields": "[]"
+  "id": "medical-history-form",
+  "name": "Medical History Form",
+  "category": "Clinical",
+  "uses": 142,
+  "pdfUrl": "Medical_History_Form.pdf",
+  "description": "Comprehensive medical history questionnaire for clinical assessment.",
+  "tags": [
+    "history",
+    "clinical assessment",
+    "medical record"
+  ],
+  "version": 2,
+  "lastEditedBy": {
+    "name": "Current User"
+  },
+  "lastEditedOn": "2025-06-23T22:43:55.005Z",
+  "fields": "[\n  {\n    \"id\": \"form-header\",\n    \"type\": \"text\",\n    \"label\": \"Medical History Form\",\n    \"required\": false,\n    \"value\": \"\",\n    \"position\": {\n      \"x\": 0,\n      \"y\": 0,\n      \"width\": 600,\n      \"height\": 48\n    }\n  }\n]"
 }

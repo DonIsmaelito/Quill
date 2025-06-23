@@ -206,6 +206,132 @@ const fileSystemPlugin = () => {
           res.end(JSON.stringify({ error: "Internal server error" }));
         }
       });
+
+      // Save template API endpoint
+      server.middlewares.use("/api/save-template", async (req: any, res: any) => {
+        if (req.method !== "POST") {
+          res.writeHead(405, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+          return;
+        }
+
+        let body = "";
+        req.on("data", (chunk: any) => {
+          body += chunk.toString();
+        });
+        req.on("end", async () => {
+          try {
+            const { templateId, data } = JSON.parse(body);
+            
+            // Ensure form-templates directory exists
+            const formTemplatesDir = path.join(__dirname, "temp", "form-templates");
+            await fs.promises.mkdir(formTemplatesDir, { recursive: true });
+            
+            // Save the template
+            const filePath = path.join(formTemplatesDir, `${templateId}.json`);
+            await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2));
+            
+            console.log(`Template saved: ${templateId}`);
+            
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ 
+              success: true, 
+              message: "Template saved successfully",
+              templateId: templateId
+            }));
+          } catch (error) {
+            console.error("Error saving template:", error);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: (error as Error).message 
+            }));
+          }
+        });
+      });
+
+      // Save uploaded PDF file API endpoint
+      server.middlewares.use("/api/save-pdf", async (req: any, res: any) => {
+        if (req.method !== "POST") {
+          res.writeHead(405, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+          return;
+        }
+
+        let body = "";
+        req.on("data", (chunk: any) => {
+          body += chunk.toString();
+        });
+        req.on("end", async () => {
+          try {
+            const { templateId, pdfData, fileName } = JSON.parse(body);
+            
+            // Ensure pdfs directory exists
+            const pdfsDir = path.join(__dirname, "temp", "pdfs");
+            await fs.promises.mkdir(pdfsDir, { recursive: true });
+            
+            // Convert base64 to buffer and save PDF
+            const pdfBuffer = Buffer.from(pdfData, 'base64');
+            const pdfPath = path.join(pdfsDir, `${templateId}.pdf`);
+            await fs.promises.writeFile(pdfPath, pdfBuffer);
+            
+            console.log(`PDF saved: ${templateId}.pdf`);
+            
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ 
+              success: true, 
+              message: "PDF saved successfully",
+              pdfUrl: `/api/pdf/${templateId}`
+            }));
+          } catch (error) {
+            console.error("Error saving PDF:", error);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: (error as Error).message 
+            }));
+          }
+        });
+      });
+
+      // Serve PDF files API endpoint
+      server.middlewares.use("/api/pdf", async (req: any, res: any) => {
+        if (req.method !== "GET") {
+          res.writeHead(405, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+          return;
+        }
+
+        try {
+          const templateId = req.url?.split('/')[1]; // Get template ID from URL
+          if (!templateId) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Template ID is required" }));
+            return;
+          }
+          
+          // Path to the PDF file
+          const pdfPath = path.join(__dirname, "temp", "pdfs", `${templateId}.pdf`);
+          
+          if (!fs.existsSync(pdfPath)) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "PDF not found" }));
+            return;
+          }
+          
+          // Serve the PDF file
+          const pdfBuffer = await fs.promises.readFile(pdfPath);
+          res.writeHead(200, { 
+            "Content-Type": "application/pdf",
+            "Content-Length": pdfBuffer.length
+          });
+          res.end(pdfBuffer);
+        } catch (error) {
+          console.error("PDF API error:", error);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Internal server error" }));
+        }
+      });
     }
   };
 };
