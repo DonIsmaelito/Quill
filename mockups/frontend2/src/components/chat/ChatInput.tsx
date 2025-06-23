@@ -9,6 +9,7 @@ interface ChatInputProps {
   isLoading?: boolean;
   onAgentResponse?: (message: string) => void;
   onSilentUpload?: (fileName: string) => void;
+  selectedLanguage?: string;
 }
 
 const ChatInput = ({
@@ -16,6 +17,7 @@ const ChatInput = ({
   isLoading = false,
   onAgentResponse,
   onSilentUpload,
+  selectedLanguage = "en",
 }: ChatInputProps) => {
   const [input, setInput] = useState("");
   const [uploadStatus, setUploadStatus] = useState<
@@ -360,6 +362,11 @@ const ChatInput = ({
 
     wsRef.current.onopen = () => {
       console.log("Voice WebSocket connected");
+      // Send language preference to voice agent
+      if (selectedLanguage) {
+        wsRef.current.send(`LANGUAGE:${selectedLanguage}`);
+        console.log(`Sent language preference: ${selectedLanguage}`);
+      }
     };
 
     wsRef.current.onmessage = (ev) => {
