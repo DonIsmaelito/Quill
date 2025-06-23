@@ -96,7 +96,7 @@
     "chronicConditions": "Asthma, Hypertension",
     "chiefComplaint": "Persistent chest tightness and shortness of breath",
     "symptomsBegin": "About 2 weeks ago",
-    "symptomsWorsened": "Yes",
+    "symptomsWorsened": "Yes, especially with physical activity",
     "consentTreatment": "Yes",
     "releaseInfoInsurance": "Yes",
     "signature": "Johnathan Doe",
@@ -108,5 +108,10 @@
     "symptomsOnset": "About 2 weeks ago",
     "consentToTreatment": "Yes",
     "releaseInfoToInsurance": "Yes",
-    "symptomsBeginDate": "About 2 weeks ago"
+    "symptomsBeginDate": "About 2 weeks ago",
+    "patientDateOfBirth": "01/15/1985",
+    "policyNumber": "BCBS123456789",
+    "groupNumber": "GRP987654321",
+    "allowReleaseOfInformation": "Yes",
+    "date": "04/11/2025"
 }

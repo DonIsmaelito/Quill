@@ -523,12 +523,14 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   useEffect(() => {
     if (highlightedFields.length > 0 && formRef.current) {
       // Find the first highlighted field element
-      const firstHighlightedField = formRef.current.querySelector('[data-highlighted="true"]');
+      const firstHighlightedField = formRef.current.querySelector(
+        '[data-highlighted="true"]'
+      );
       if (firstHighlightedField) {
         // Scroll the field into view with smooth behavior and some offset from the top
-        firstHighlightedField.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'center'
+        firstHighlightedField.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
         });
       }
     }
@@ -541,14 +543,16 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
 
     // Validate required fields
     const missingFields = fields
-      .filter(field => field.required && !formValues[field.id])
-      .map(field => field.label);
+      .filter((field) => field.required && !formValues[field.id])
+      .map((field) => field.label);
 
     if (missingFields.length > 0) {
       toast({
         title: "Missing Required Fields",
-        description: `Please fill in the following required fields: ${missingFields.join(', ')}`,
-        variant: "destructive"
+        description: `Please fill in the following required fields: ${missingFields.join(
+          ", "
+        )}`,
+        variant: "destructive",
       });
       return;
     }
@@ -625,10 +629,62 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
         variant: "destructive"
       });
     }
+
+    // // EHR submission logic !! NOTE: FROM MC, REVISIT LATER
+
+    // try {
+    //   // Prepare form data for EHR submission
+    //   const formData = {
+    //     formName: "Patient Registration Form",
+    //     formData: formValues,
+    //   };
+
+    //   // Submit to EHR API
+    //   const response = await fetch("http://localhost:8000/ehr/submit-form", {
+    //     method: "POST",
+    //     headers: {
+    //       "Content-Type": "application/json",
+    //     },
+    //     body: JSON.stringify(formData),
+    //   });
+
+    //   if (!response.ok) {
+    //     throw new Error(`HTTP error! status: ${response.status}`);
+    //   }
+
+    //   const result = await response.json();
+
+    //   if (result.success) {
+    //     toast({
+    //       title: "Registration Successful",
+    //       description: `Patient registration has been submitted successfully. Patient ID: ${result.personId}`,
+    //     });
+
+    //     // Log updates made to EHR
+    //     if (result.updates && result.updates.length > 0) {
+    //       console.log("EHR Updates:", result.updates);
+    //     }
+    //   } else {
+    //     toast({
+    //       title: "Registration Failed",
+    //       description: result.errors
+    //         ? result.errors.join(", ")
+    //         : "Failed to process registration",
+    //       variant: "destructive",
+    //     });
+    //   }
+    // } catch (error) {
+    //   console.error("Error submitting form:", error);
+    //   toast({
+    //     title: "Submission Error",
+    //     description: "Failed to submit registration. Please try again.",
+    //     variant: "destructive",
+    //   });
+    // }
   };
 
   const handleReview = () => {
-    console.log('Reviewing form data:', formValues);
+    console.log("Reviewing form data:", formValues);
     setReviewOpen(true);
   };
 
@@ -725,7 +781,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
         </div>
       </form>
 
-      <FormReview 
+      <FormReview
         isOpen={reviewOpen}
         onClose={handleCloseReview}
         fields={reviewFields}
