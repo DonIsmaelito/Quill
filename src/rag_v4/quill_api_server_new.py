@@ -15,7 +15,7 @@ from langchain_core.documents import Document
 import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path
-from unstructured.partition.pdf import partition_pdf
+#from unstructured.partition.pdf import partition_pdf
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +34,14 @@ import json
 import re
 import logging
 from openai.types.chat.completion_create_params import ResponseFormat
+
+# Import EHR router
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from mock_ehr.ehr_api import router as ehr_router
+from mock_ehr.supabase_manager import SupabaseManager
+from mock_ehr.patient_queries import PatientDataQuery
 
 load_dotenv()
 
@@ -73,6 +81,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include EHR router
+app.include_router(ehr_router)
 
 # Pydantic models for API
 class QueryRequest(BaseModel):
@@ -345,14 +356,14 @@ def extract_components_from_native_pdf(file_path):
     """Extract text from PDF using native extraction."""
     logging.info(f"Processing PDF natively: {file_path}")
     
-    try:
+    #try:
         # Use unstructured library to partition PDF
-        elements = partition_pdf(file_path)
-        logging.info(f"Extracted {len(elements)} elements from PDF")
-        return elements, False
-    except Exception as e:
-        logging.error(f"Error extracting components from PDF natively: {e}")
-        return extract_text_from_pdf_with_ocr(file_path), True
+        #elements = partition_pdf(file_path)
+        #logging.info(f"Extracted {len(elements)} elements from PDF")
+        #return elements, False
+    #except Exception as e:
+    logging.error(f"Error extracting components from PDF natively: {e}")
+    return extract_text_from_pdf_with_ocr(file_path), True
 
 def ingest_file(file_path, get_native_elements=False):
     """Load a file (PDF, Word, image, or CSV) with OCR for PDFs."""
@@ -2439,6 +2450,176 @@ async def generate_form_endpoint(
     except Exception as e:
         logging.error(f"Error in generate form endpoint: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate form: {str(e)}")
+
+# ---------------------------------------------------------------------------
+# WebSocket endpoint for clinic-side voice communication (doctors)
+# ---------------------------------------------------------------------------
+
+@app.websocket("/clinic_voice_ws")
+async def clinic_voice_ws(websocket: WebSocket):
+    """Handle clinic-side voice chat for doctors to query patient information."""
+    
+    await websocket.accept()
+    
+    # Initialize patient query handler
+    db_manager = SupabaseManager()
+    patient_query = PatientDataQuery(db_manager)
+    
+    # Conversation memory
+    conversation = []
+    current_patient = None  # Track which patient we're discussing
+    
+    audio_chunks: list[bytes] = []
+    
+    try:
+        while True:
+            msg = await websocket.receive()
+            
+            # Binary frame – append to buffer
+            if "bytes" in msg and msg["bytes"] is not None:
+                audio_data = msg["bytes"]
+                logging.debug("clinic_voice_ws: received %d audio bytes", len(audio_data))
+                
+                if len(audio_data) > 1000:  # Substantial audio data
+                    audio_chunks = [audio_data]
+                    logging.debug("clinic_voice_ws: received substantial audio blob")
+                else:
+                    audio_chunks.append(audio_data)
+                continue
+            
+            # Text frame acts as control
+            if "text" in msg and msg["text"]:
+                text_msg = msg["text"].strip()
+                
+                if text_msg.upper() != "END":
+                    continue
+                
+                # Process audio
+                if not audio_chunks:
+                    await websocket.send_json({"type": "error", "content": "No audio received"})
+                    continue
+                
+                logging.debug("clinic_voice_ws: END received – processing %d audio chunks", len(audio_chunks))
+                audio_bytes = b"".join(audio_chunks)
+                audio_chunks = []
+                
+                # Validate audio
+                if len(audio_bytes) < 1000:
+                    await websocket.send_json({"type": "error", "content": "Audio too short. Please speak clearly."})
+                    continue
+                
+                # Speech-to-Text
+                try:
+                    transcript = voice_helper.transcribe(audio_bytes)
+                    logging.info("clinic_voice_ws: transcript='%s'", transcript)
+                    
+                    if not transcript or transcript.strip() in ["[No speech detected]", "[Transcription failed", ""]:
+                        await websocket.send_json({"type": "error", "content": "Could not understand. Please try again."})
+                        continue
+                    
+                except Exception as e:
+                    logging.error("clinic_voice_ws: ASR exception: %s", e)
+                    await websocket.send_json({"type": "error", "content": f"ASR failed: {e}"})
+                    continue
+                
+                # Add to conversation
+                conversation.append({"type": "doctor", "content": transcript})
+                
+                # Process the doctor's query
+                try:
+                    # Extract patient name if mentioned
+                    import re
+                    patient_pattern = r"(?:patient|about|for|regarding)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)"
+                    match = re.search(patient_pattern, transcript, re.IGNORECASE)
+                    
+                    if match:
+                        current_patient = match.group(1).strip()
+                        logging.info(f"clinic_voice_ws: Identified patient: {current_patient}")
+                    
+                    if not current_patient:
+                        reply_text = "I need to know which patient you're asking about. Please say something like 'Tell me about patient John Doe' or 'What are the allergies for Jane Smith?'"
+                    else:
+                        # Get patient data
+                        patient_data = patient_query.get_patient_summary(current_patient)
+                        
+                        if "error" in patient_data:
+                            reply_text = f"I couldn't find {current_patient} in our system. Please check the patient name and try again."
+                        else:
+                            # Create prompt for medical assistant
+                            prompt = f"""You are a knowledgeable medical assistant helping a doctor access patient information from the EHR system.
+
+PATIENT DATA:
+{json.dumps(patient_data, indent=2)}
+
+DOCTOR'S QUESTION: {transcript}
+
+INSTRUCTIONS:
+- Provide accurate, concise information based on the patient data
+- If information is missing or blank, say "No information available" or "Not recorded"
+- Be conversational but professional
+- Focus on answering the specific question asked
+- Do not make up or assume any information not in the data
+- Format lists clearly (e.g., medications, conditions)
+- Include relevant dates when available
+
+RESPONSE:"""
+
+                            # Get response from OpenAI
+                            response = openai_client.chat.completions.create(
+                                model=OPENAI_MODEL_NAME,
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful medical assistant retrieving patient information from an EHR system."},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                temperature=0.1,
+                                max_tokens=500
+                            )
+                            
+                            reply_text = response.choices[0].message.content.strip()
+                    
+                except Exception as e:
+                    logging.error(f"clinic_voice_ws: Error processing query: {e}")
+                    reply_text = "I encountered an error retrieving the patient information. Please try again."
+                
+                # Add assistant response to conversation
+                conversation.append({"type": "assistant", "content": reply_text})
+                
+                # TTS
+                logging.debug("clinic_voice_ws: synthesizing TTS for reply")
+                try:
+                    audio_reply = voice_helper.synthesize(reply_text)
+                    logging.info("clinic_voice_ws: TTS synthesis completed, got %d bytes", len(audio_reply))
+                except Exception as e:
+                    logging.error("clinic_voice_ws: TTS synthesis failed: %s", e)
+                    await websocket.send_json({"type": "error", "content": f"TTS failed: {e}"})
+                    continue
+                
+                # Send response
+                response_json = json.dumps({
+                    "type": "assistant_text",
+                    "content": reply_text,
+                    "current_patient": current_patient,
+                    "user_transcript": transcript  # Add the user's transcript
+                })
+                
+                await websocket.send_text(response_json)
+                await websocket.send_bytes(audio_reply)
+                
+    except WebSocketDisconnect:
+        logging.info("clinic_voice_ws: WebSocket disconnected cleanly")
+    except Exception as e:
+        logging.error("clinic_voice_ws: Unexpected error: %s", e)
+        try:
+            if websocket.application_state == WebSocketState.CONNECTED:
+                await websocket.send_json({"type": "error", "content": "Voice processing error occurred"})
+        except:
+            pass
+        
+        try:
+            if websocket.application_state not in [WebSocketState.DISCONNECTED, WebSocketState.DISCONNECTING]:
+                await websocket.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     # Create required directories

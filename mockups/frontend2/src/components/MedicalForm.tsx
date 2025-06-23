@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import FormField, { FieldType, FieldOption } from './FormField';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import FormReview from './FormReview';
-import { useToast } from '@/hooks/use-toast';
+import React, { useState, useEffect, useRef } from "react";
+import FormField, { FieldType, FieldOption } from "./FormField";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import FormReview from "./FormReview";
+import { useToast } from "@/hooks/use-toast";
 
 interface FormData {
   [key: string]: any;
@@ -36,12 +36,12 @@ interface MedicalFormProps {
   highlightedFields?: string[];
 }
 
-const MedicalForm: React.FC<MedicalFormProps> = ({ 
-  uploadedFiles, 
-  fields, 
+const MedicalForm: React.FC<MedicalFormProps> = ({
+  uploadedFiles,
+  fields,
   formValues,
   onChange,
-  highlightedFields = []
+  highlightedFields = [],
 }) => {
   const { toast } = useToast();
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -51,12 +51,14 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   useEffect(() => {
     if (highlightedFields.length > 0 && formRef.current) {
       // Find the first highlighted field element
-      const firstHighlightedField = formRef.current.querySelector('[data-highlighted="true"]');
+      const firstHighlightedField = formRef.current.querySelector(
+        '[data-highlighted="true"]'
+      );
       if (firstHighlightedField) {
         // Scroll the field into view with smooth behavior and some offset from the top
-        firstHighlightedField.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'center'
+        firstHighlightedField.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
         });
       }
     }
@@ -68,34 +70,82 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
     onChange({ ...formValues, [id]: value });
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
     }
 
     // Validate required fields
     const missingFields = fields
-      .filter(field => field.required && !formValues[field.id])
-      .map(field => field.label);
+      .filter((field) => field.required && !formValues[field.id])
+      .map((field) => field.label);
 
     if (missingFields.length > 0) {
       toast({
         title: "Missing Required Fields",
-        description: `Please fill in the following required fields: ${missingFields.join(', ')}`,
-        variant: "destructive"
+        description: `Please fill in the following required fields: ${missingFields.join(
+          ", "
+        )}`,
+        variant: "destructive",
       });
       return;
     }
 
-    console.log('Form submitted:', formValues);
-    toast({
-      title: "Registration Successful",
-      description: "Your patient registration has been submitted successfully.",
-    });
+    console.log("Form submitted:", formValues);
+
+    try {
+      // Prepare form data for EHR submission
+      const formData = {
+        formName: "Patient Registration Form",
+        formData: formValues,
+      };
+
+      // Submit to EHR API
+      const response = await fetch("http://localhost:8000/ehr/submit-form", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: "Registration Successful",
+          description: `Patient registration has been submitted successfully. Patient ID: ${result.personId}`,
+        });
+
+        // Log updates made to EHR
+        if (result.updates && result.updates.length > 0) {
+          console.log("EHR Updates:", result.updates);
+        }
+      } else {
+        toast({
+          title: "Registration Failed",
+          description: result.errors
+            ? result.errors.join(", ")
+            : "Failed to process registration",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      toast({
+        title: "Submission Error",
+        description: "Failed to submit registration. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleReview = () => {
-    console.log('Reviewing form data:', formValues);
+    console.log("Reviewing form data:", formValues);
     setReviewOpen(true);
   };
 
@@ -103,23 +153,27 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
     setReviewOpen(false);
   };
 
-  const reviewFields = fields.map(field => ({
+  const reviewFields = fields.map((field) => ({
     id: field.id,
     label: field.label,
     value: formValues[field.id],
     autofilled: field.autofilled,
-    autofillSource: field.autofillSource
+    autofillSource: field.autofillSource,
   }));
 
   return (
     <Card className="bg-white dark:bg-gray-900 shadow-sm">
       <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800">
-        <h2 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">New Patient Registration</h2>
-        <p className="mt-2 text-base text-gray-500 dark:text-gray-400">Please fill out all required fields marked with an asterisk (*)</p>
+        <h2 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">
+          New Patient Registration
+        </h2>
+        <p className="mt-2 text-base text-gray-500 dark:text-gray-400">
+          Please fill out all required fields marked with an asterisk (*)
+        </p>
       </div>
       <form onSubmit={handleSubmit} className="p-8">
         <div ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {fields.map(field => (
+          {fields.map((field) => (
             <FormField
               key={field.id}
               id={field.id}
@@ -147,16 +201,13 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
           >
             Review Registration
           </Button>
-          <Button
-            type="submit"
-            className="bg-primary hover:bg-primary/90"
-          >
+          <Button type="submit" className="bg-primary hover:bg-primary/90">
             Submit Registration
           </Button>
         </div>
       </form>
 
-      <FormReview 
+      <FormReview
         isOpen={reviewOpen}
         onClose={handleCloseReview}
         fields={reviewFields}

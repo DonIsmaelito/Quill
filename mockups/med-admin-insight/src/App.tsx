@@ -19,6 +19,7 @@ import NotificationSettings from "./components/settings/NotificationSettings";
 import DoctorsDirectory from "./pages/DoctorsDirectory";
 import AssignTemplatePage from "./pages/AssignTemplatePage";
 import NotFound from "./pages/NotFound";
+import { VoiceAssistant } from "./components/VoiceAssistant";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,8 @@ const App = () => (
           />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        {/* Voice Assistant - Always visible on all pages */}
+        <VoiceAssistant />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
