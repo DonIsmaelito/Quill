@@ -456,6 +456,62 @@ export async function POST(request: Request) {
           )
         );
       }
+    } else if (mode === "generate-form") {
+      const description = formData.get("description") as string;
+      const category = formData.get("category") as string;
+      const audience = formData.get("audience") as string;
+
+      if (!description) {
+        return addCorsHeaders(
+          NextResponse.json(
+            { error: "Form description is required" },
+            { status: 400 }
+          )
+        );
+      }
+
+      console.log("Generating form from description:", description);
+
+      // Set up the API form data
+      const apiFormData = new FormData();
+      apiFormData.append("description", description);
+      
+      if (category) {
+        apiFormData.append("category", category);
+      }
+      
+      if (audience) {
+        apiFormData.append("audience", audience);
+      }
+
+      try {
+        // Call the FastAPI generate-form endpoint
+        const response = await axios.post(
+          `${FASTAPI_URL}/generate-form`,
+          apiFormData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
+
+        return addCorsHeaders(NextResponse.json(response.data));
+      } catch (error: any) {
+        console.error(
+          "Error calling FastAPI generate-form endpoint:",
+          error.response?.data || error.message
+        );
+        return addCorsHeaders(
+          NextResponse.json(
+            {
+              error: "Failed to generate form",
+              details: error.response?.data || error.message,
+            },
+            { status: error.response?.status || 500 }
+          )
+        );
+      }
     }
 
     return addCorsHeaders(

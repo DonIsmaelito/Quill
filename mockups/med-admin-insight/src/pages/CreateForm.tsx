@@ -35,6 +35,10 @@ import {
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ragService } from "../../../frontend2/src/services/ragService";
+import { FormField } from "../types/form";
+import { DigitizedForm } from "../components/DigitizedForm";
+import { processFormData } from "../utils/formProcessing";
 
 type FormCreationStep = "describe" | "editAI" | "send";
 
@@ -69,46 +73,79 @@ export default function CreateForm() {
   const [mockPdfPreviewUrl, setMockPdfPreviewUrl] = useState<string | null>(
     null
   );
-  const [generatedFields, setGeneratedFields] = useState<GeneratedField[]>([]);
+  const [generatedFields, setGeneratedFields] = useState<FormField[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const [sendOption, setSendOption] = useState<string>("");
   const [trackFulfilment, setTrackFulfilment] = useState(true);
 
-  const handleGenerateWithAI = () => {
+  const handleGenerateWithAI = async () => {
     if (!formDescription.trim()) {
       alert("Please describe the form you need.");
       return;
     }
-    console.log("Generating form with AI...", {
-      formDescription,
-      selectedCategory,
-      selectedAudience,
-    });
-    setMockPdfPreviewUrl("/Patient_Intake_Form.pdf");
-    setGeneratedFields([
-      { id: "f1", label: "Full Name", type: "Text Input" },
-      { id: "f2", label: "Date of Birth", type: "Date Picker" },
-      { id: "f3", label: "Reason for Visit", type: "Text Area" },
-      { id: "f4", label: "Primary Insurance", type: "Text Input" },
-      { id: "f5", label: "Emergency Contact", type: "Text Input" },
-      { id: "f6", label: "Patient Signature", type: "Signature" },
-    ]);
-    setCurrentStep("editAI");
+    
+    setIsGenerating(true);
+    
+    try {
+      console.log("Generating form with AI...", {
+        formDescription,
+        selectedCategory,
+        selectedAudience,
+      });
+      
+      // Call the new AI form generation endpoint
+      const response = await ragService.generateFormFromDescription(
+        formDescription,
+        selectedCategory,
+        selectedAudience
+      );
+      
+      console.log("AI generated form response:", response);
+      
+      // Process the hierarchical form data
+      const fields = processFormData(response.extracted_info);
+      
+      console.log("Processed fields:", fields);
+
+      setGeneratedFields(fields);
+      
+      // Set a mock PDF preview URL for now (in a real implementation, this would be generated)
+      setMockPdfPreviewUrl("/Patient_Intake_Form.pdf");
+      
+      setCurrentStep("editAI");
+    } catch (error) {
+      console.error("Error generating form with AI:", error);
+      alert("Error generating form. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleRegenerate = () => {
+  const handleRegenerate = async () => {
     console.log("Regenerating form...");
-    const variations = [
-      {
-        id: "f1-v2",
-        label: "Patient Full Name",
-        type: "Text Input (Required)",
-      },
-      { id: "f2-v2", label: "DOB", type: "Date Field" },
-      { id: "f3-v2", label: "Chief Complaint", type: "Large Text Box" },
-    ];
-    setGeneratedFields(variations);
-    setMockPdfPreviewUrl("/Medical_History_Form.pdf");
+    setIsGenerating(true);
+    
+    try {
+      // Call the AI generation again with the same parameters
+      const response = await ragService.generateFormFromDescription(
+        formDescription,
+        selectedCategory,
+        selectedAudience
+      );
+      
+      // Process the hierarchical form data
+      const fields = processFormData(response.extracted_info);
+      setGeneratedFields(fields);
+      
+      // Update the mock PDF preview URL
+      setMockPdfPreviewUrl("/Medical_History_Form.pdf");
+    } catch (error) {
+      console.error("Error regenerating form:", error);
+      alert("Error regenerating form. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleSaveAndSend = () => {
@@ -125,21 +162,6 @@ export default function CreateForm() {
   const handleSaveDraft = () => {
     console.log("Saving draft...", { generatedFields });
     alert("Form draft saved!");
-  };
-
-  const handleAddField = () => {
-    setGeneratedFields((prev) => [
-      ...prev,
-      {
-        id: `new-${Date.now()}`,
-        label: "New Custom Field",
-        type: "Text Input",
-      },
-    ]);
-  };
-
-  const handleDeleteField = (fieldId: string) => {
-    setGeneratedFields((prev) => prev.filter((f) => f.id !== fieldId));
   };
 
   return (
@@ -238,10 +260,18 @@ export default function CreateForm() {
                   <Button
                     size="lg"
                     onClick={handleGenerateWithAI}
-                    disabled={!formDescription.trim()}
+                    disabled={!formDescription.trim() || isGenerating}
                     className="bg-medical-primary hover:bg-medical-primary/90 text-base px-8 py-3"
                   >
-                    <Wand2 className="h-5 w-5 mr-2" /> Generate with AI
+                    {isGenerating ? (
+                      <>
+                        <RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="h-5 w-5 mr-2" /> Generate with AI
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>
@@ -269,77 +299,43 @@ export default function CreateForm() {
                     <Edit className="h-4 w-4 mr-2" /> Back to Description
                   </Button>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4">
-                  <div className="lg:col-span-1 space-y-3">
-                    <h4 className="text-lg font-medium text-gray-700">
-                      Form Preview
-                    </h4>
-                    <div className="aspect-[8.5/11] w-full border rounded-lg overflow-hidden shadow-md bg-gray-100">
-                      <iframe
-                        src={mockPdfPreviewUrl}
-                        title="Generated Form Preview"
-                        width="100%"
-                        height="100%"
-                        className="border-0"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-1 space-y-3">
+                <CardContent className="space-y-6">
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <h4 className="text-lg font-medium text-gray-700">
                         Editable Fields ({generatedFields.length})
                       </h4>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddField}
-                      >
-                        <PlusCircle className="h-4 w-4 mr-2" /> Add Field
-                      </Button>
                     </div>
-                    <ScrollArea className="h-[400px] border rounded-md p-3 bg-slate-50/50">
+                    <div className="w-full border rounded-lg overflow-hidden shadow-md bg-white">
                       {generatedFields.length > 0 ? (
-                        <ul className="space-y-2">
-                          {generatedFields.map((field) => (
-                            <li
-                              key={field.id}
-                              className="p-2.5 bg-white rounded-md shadow-sm border flex justify-between items-center hover:shadow-md transition-shadow"
-                            >
-                              <div>
-                                <p className="font-medium text-sm text-gray-800">
-                                  {field.label}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Type: {field.type}
-                                </p>
-                              </div>
-                              <div className="space-x-1.5">
-                                <Button
-                                  variant="ghost"
-                                  size="icon_sm"
-                                  className="h-7 w-7 text-gray-500 hover:text-blue-600"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon_sm"
-                                  className="h-7 w-7 text-gray-500 hover:text-red-600"
-                                  onClick={() => handleDeleteField(field.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                        <DigitizedForm 
+                          fields={generatedFields} 
+                          onDeleteField={(fieldId) => {
+                            setGeneratedFields(prev => prev.filter(field => field.id !== fieldId));
+                          }}
+                          onAddField={(newField, index) => {
+                            setGeneratedFields(prev => {
+                              const newFields = [...prev];
+                              newFields.splice(index, 0, newField);
+                              return newFields;
+                            });
+                          }}
+                          onEditField={(fieldId, updates) => {
+                            setGeneratedFields(prev => 
+                              prev.map(field => 
+                                field.id === fieldId 
+                                  ? { ...field, ...updates }
+                                  : field
+                              )
+                            );
+                          }}
+                        />
                       ) : (
-                        <p className="text-center text-gray-500 py-4">
-                          No fields generated yet.
-                        </p>
+                        <div className="flex items-center justify-center h-64">
+                          <p className="text-gray-500">No fields generated yet</p>
+                        </div>
                       )}
-                    </ScrollArea>
+                    </div>
                   </div>
                 </CardContent>
                 <CardFooter className="flex justify-between items-center pt-6 border-t">
@@ -347,9 +343,18 @@ export default function CreateForm() {
                     variant="outline"
                     size="lg"
                     onClick={handleRegenerate}
+                    disabled={isGenerating}
                     className="text-base"
                   >
-                    <RefreshCw className="h-4 w-4 mr-2" /> Regenerate
+                    {isGenerating ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" /> Regenerate
+                      </>
+                    )}
                   </Button>
                   <Button
                     size="lg"

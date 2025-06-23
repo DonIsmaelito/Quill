@@ -28,10 +28,17 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from starlette.websockets import WebSocketState
 
+from pydantic import BaseModel, Field, field_validator, model_validator, RootModel
+from typing import Dict, Any, Union, Optional
+import json
+import re
+import logging
+from openai.types.chat.completion_create_params import ResponseFormat
+
 load_dotenv()
 
-# Performance optimization: Using gpt-3.5-turbo for faster response times (~400ms vs ~1200ms)
-OPENAI_MODEL_NAME = "gpt-3.5-turbo"
+# Use quick/cheap model that works with Structured Outputs
+OPENAI_MODEL_NAME = "gpt-4.1-nano"
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
@@ -323,8 +330,64 @@ def extract_key_value_info(chunks, text, llm):
         logging.error(f"Error in key-value extraction: {e}")
         return {}
 
+# Define flexible Pydantic models that match the legacy format
+class FieldValue(RootModel[Dict[str, Union[str, bool, None]]]):
+    """Represents a single field as key-value pair in the legacy format"""
+    root: Dict[str, Union[str, bool, None]]
+
+class FormSection(RootModel[Dict[str, Union[Dict[str, Union[str, bool, None]], "FormSection", str]]]):
+    """Represents a section that can contain dynamically numbered fields or subsections"""
+    root: Dict[str, Union[Dict[str, Union[str, bool, None]], "FormSection", str]]
+    
+    @model_validator(mode='before')
+    @classmethod
+    def validate_keys(cls, v):
+        """Ensure keys follow expected patterns or are valid subsection names"""
+        if not isinstance(v, dict):
+            return v
+            
+        valid_patterns = [
+            r'^text\d+$',       # text1, text2, etc.
+            r'^boolean\d+$',    # boolean1, boolean2, etc.  
+            r'^date\d+$',       # date1, date2, etc.
+            r'^table\d+$',      # table1, table2, etc.
+        ]
+        
+        for key, value in v.items():
+            # Check if it matches a field pattern
+            is_field_pattern = any(re.match(pattern, key) for pattern in valid_patterns)
+            
+            # If it matches a field pattern, it should be a dict with string keys
+            if is_field_pattern:
+                if not isinstance(value, dict):
+                    raise ValueError(f"Field {key} should be a key-value mapping")
+                # Validate it's a simple key-value pair
+                if not all(isinstance(k, str) and isinstance(v, (str, bool, type(None))) 
+                          for k, v in value.items()):
+                    raise ValueError(f"Field {key} should contain string keys and string/bool/None values")
+            
+            # Otherwise it's either a subsection (dict) or content (string)
+            elif not isinstance(value, (dict, str)):
+                raise ValueError(f"Section key {key} should be either a subsection (dict), field (dict), or content (string)")
+        
+        return v
+
+class ExtractedFormData(RootModel[Dict[str, FormSection]]):
+    """Root model matching the exact legacy format"""
+    root: Dict[str, FormSection]
+    
+    @model_validator(mode='before')
+    @classmethod
+    def validate_single_form(cls, v):
+        """Ensure there's exactly one top-level form"""
+        if not isinstance(v, dict):
+            return v
+        if len(v) != 1:
+            raise ValueError("Should contain exactly one form at the root level")
+        return v
+
 def extract_template_key_value_info(elements, used_pdf_ocr=False):
-    """Extract key-value pairs from document elements using enhanced prompts."""
+    """Extract key-value pairs from document elements using enhanced prompts with structured outputs."""
     try:
         logging.info("Extracting key-value pairs from template document elements")
         if not elements:
@@ -660,9 +723,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
                 }
             }
         },
-        {
-            "Disclaimer": "Any articles, templates, or information provided by Smartsheet on the website are for reference only. While we strive to keep the information up to date and correct, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability with respect to the website or the information, articles, templates, or related graphics contained on the website. Any reliance you place on such information is therefore strictly at your own risk."
-        },
+        "Disclaimer": "Any articles, templates, or information provided by Smartsheet on the website are for reference only. While we strive to keep the information up to date and correct, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability with respect to the website or the information, articles, templates, or related graphics contained on the website. Any reliance you place on such information is therefore strictly at your own risk.",
         "text6": {
             "Other comments:": ""
         }
@@ -684,6 +745,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
             "- If there is no prefilled value, the value should be an empty string\n"
             "- EXCLUDE metadata, schema information, vector embeddings, or system fields\n"
             "- Indicate each field's type (text, boolean, date, etc.) as a parent JSON key followed by a number representing the field's position in that particular JSON element (e.g., 'text1', 'boolean2')\n"
+            "- You can use ANY number after the type - text1, text2, text3... text50, text100, etc. There are no limits.\n"
             "- Even if there are multiple fields with the same type, they each need to be typed with a unique key\n"
             "- For example, use {{'text1': {'First name': ''}}, {'text2': {'Last name': ''}}} for text/string fields\n"
             "- For example, use {'boolean1': {'hasAllergies': false}} or {'date1': {'vaccinationDate': ''}} for checkboxes or date fields\n"
@@ -698,7 +760,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
             "Tables may be represented by a simple sequence of their column names right after each other. Identify possible tables and form their fields accordingly.\n"
             "If there are checkboxes, represent them as boolean fields (e.g., {'boolean1': {'hasAllergies': false}}).\n"
             "Don't output JSON arrays.\n"
-            "If there are ever any parts of the form that are just read-only text, like a disclaimer or instructions, include them as subheaders.\n"
+            "If there are ever any parts of the form that are just read-only text, like a disclaimer or instructions, include them as direct string values under a descriptive key.\n"
             "Always include an 'Other comments' field at the very end of the output JSON for the patient to fill in any additional information they want to provide.\n\n"
             "Only use double quotes for JSON keys, and provide a properly formatted JSON object.\n"
             "Create sections/subheaders as you see fit, and if you think some fields should exist but are not clearly defined in the raw text, feel free to add them with empty values.\n\n"
@@ -716,23 +778,22 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
             "OUTPUT (NESTED JSON ONLY, NO OTHER TEXT):"
         )
             
-        # result = llm.invoke(input=prompt)
-        # raw_output = result.content.strip()
-        
         logging.info(f"Prompt text: {prompt}")
         
-        # make sure response is a JSON object
+        # Use structured outputs with the defined schema
         response = openai_client.chat.completions.create(
             model=OPENAI_MODEL_NAME,
             messages=[
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
-            n=1,
-            stop=None,
-            response_format={
-                "type": "json_object",
-            }
+            # response_format={
+            #     "type": "json_schema",
+            #     "json_schema": {
+            #         "name": "extracted_form_data",
+            #         "schema": ExtractedFormData.model_json_schema()
+            #     }
+            # }
         )
         
         logging.info(f"OpenAI response: {response}")
@@ -764,6 +825,7 @@ def extract_template_key_value_info(elements, used_pdf_ocr=False):
             except Exception as e2:
                 logging.error(f"Failed to fix JSON: {e2}")
                 return {}
+                
     except Exception as e:
         logging.error(f"Error in key-value extraction: {e}")
         return {}
@@ -1972,6 +2034,124 @@ def clean_response_for_voice(response_text: str) -> str:
         return "Yes, I can hear you perfectly! I'm here to help you with your medical form. What would you like me to help you with?"
     
     return response_text
+
+def generate_form_from_description(description: str, category: str = "", audience: str = ""):
+    """Generate a form template from a description using AI."""
+    try:
+        logging.info(f"Generating form from description: {description}")
+        
+        # Build context from category and audience
+        context_info = ""
+        if category:
+            context_info += f"Category: {category}\n"
+        if audience:
+            context_info += f"Primary Audience: {audience}\n"
+        
+        prompt = (
+            "You are a medical form design expert. Your task is to create a comprehensive medical form based on a description provided by a healthcare professional.\n\n"
+            "TASK: Generate a complete form structure in JSON format that matches the description provided.\n\n"
+            "GUIDELINES:\n"
+            "- Create a SINGLE-LEVEL JSON structure with proper nesting for logical grouping\n"
+            "- Use the same field type system as existing forms: 'text', 'boolean', 'date', 'table'\n"
+            "- For data that is semantically structured, maintain hierarchical organization:\n"
+            "  INSTEAD OF: {'text1': {'Patient name': ''}}, {'text2': {'Patient phone': ''}}\n"
+            "  USE: {'Patient': {'text1': {'Name': ''}, 'text2': {'Phone number': ''}}}\n"
+            "- Include ALL fields that would be relevant for the described form\n"
+            "- Add any standard medical fields that would typically be included\n"
+            "- Use common sense to group related fields together\n"
+            "- Ensure keys are specific and self-explanatory\n"
+            "- If there are multiple instances of similar fields, keep all of them\n"
+            "- For table-type data (like medications, procedures, etc.), use the 'table' type\n"
+            "- For checkboxes or yes/no questions, use 'boolean' type\n"
+            "- For date fields, use 'date' type\n"
+            "- For text input, use 'text' type\n"
+            "- Indicate each field's type as a parent JSON key followed by a number (e.g., 'text1', 'boolean2')\n"
+            "- You can use ANY number after the type - text1, text2, text3... text50, text100, etc.\n"
+            "- Each field needs a unique typed key, even if there are multiple fields of the same type\n"
+            "- For tables, precede the table column fields with a parent JSON key indicating 'table' type\n"
+            "- Include disclaimers, instructions, or read-only text as direct string values under descriptive keys\n"
+            "- Always include an 'Other comments' field at the very end for additional information\n\n"
+            "EXAMPLES OF PROPER STRUCTURE:\n"
+            "1. Patient intake form: {'Patient Information': {'text1': {'Full Name': ''}, 'date1': {'Date of Birth': ''}, 'text2': {'Phone Number': ''}}}\n"
+            "2. Medication list: {'Current Medications': {'table1': {'text1': {'Medication Name': ''}, 'text2': {'Dosage': ''}, 'text3': {'Frequency': ''}, 'date1': {'Start Date': ''}}}}\n"
+            "3. Allergy section: {'Allergies': {'boolean1': {'Has Allergies': false}, 'text1': {'Allergy Details': ''}}}\n\n"
+            "IMPORTANT: Only use double quotes for JSON keys and provide a properly formatted JSON object.\n"
+            "Create sections/subheaders as you see fit, and add any fields that would be relevant but not explicitly mentioned.\n"
+            "The ONLY types you can use are 'text', 'boolean', 'date', and 'table'. Don't use other types.\n"
+            "If there is any data that wouldn't make sense as a form field, do NOT include it in the output JSON.\n\n"
+            f"FORM DESCRIPTION:\n{description}\n\n"
+            f"CONTEXT:\n{context_info}\n\n"
+            "OUTPUT (NESTED JSON ONLY, NO OTHER TEXT):"
+        )
+        
+        logging.info(f"Prompt text: {prompt}")
+        
+        response = openai_client.chat.completions.create(
+            model=OPENAI_MODEL_NAME,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+        )
+        
+        logging.info(f"OpenAI response: {response}")
+        
+        raw_output = response.choices[0].message.content.strip()
+        
+        logging.info(f"Raw output from LLM: {raw_output}")
+        
+        # Robust JSON extraction
+        json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+        json_str = json_match.group(0) if json_match else "{}"
+        
+        try:
+            info = json.loads(json_str)
+            logging.info(f"Successfully generated form with {len(info)} top-level sections")
+            return info
+        except json.JSONDecodeError as e:
+            # Try to repair common JSON issues
+            logging.warning(f"JSON parsing failed: {e}, attempting to fix")
+            # Replace single quotes with double quotes
+            json_str = json_str.replace("'", "\"")
+            # Fix missing quotes around keys
+            json_str = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', json_str)
+            
+            try:
+                info = json.loads(json_str)
+                logging.info(f"Fixed JSON and generated form with {len(info)} top-level sections")
+                return info
+            except Exception as e2:
+                logging.error(f"Failed to fix JSON: {e2}")
+                return {}
+                
+    except Exception as e:
+        logging.error(f"Error in form generation: {e}")
+        return {}
+
+@app.post("/generate-form")
+async def generate_form_endpoint(
+    description: str = Form(...),
+    category: Optional[str] = Form(""),
+    audience: Optional[str] = Form("")
+):
+    """Generate a form template from a description."""
+    try:
+        logging.info(f"Generating form from description: {description}")
+        
+        # Generate the form structure
+        form_structure = generate_form_from_description(description, category, audience)
+        
+        if not form_structure:
+            raise HTTPException(status_code=500, detail="Failed to generate form structure")
+        
+        return {
+            "status": "success",
+            "message": "Form generated successfully",
+            "extracted_info": form_structure
+        }
+    except Exception as e:
+        logging.error(f"Error in generate form endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate form: {str(e)}")
 
 if __name__ == "__main__":
     # Create required directories

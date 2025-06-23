@@ -7,7 +7,7 @@ from elevenlabs.client import ElevenLabs
 
 # Load .env file from the voice_agent directory
 import pathlib
-current_dir = pathlib.Path(__file__).parent
+current_dir = pathlib.Path(__file__).parent.parent.parent
 dotenv_path = current_dir / ".env"
 load_dotenv(dotenv_path)
 

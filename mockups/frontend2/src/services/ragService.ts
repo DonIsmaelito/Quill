@@ -123,6 +123,18 @@ class RAGService {
     return { message: response.message, extracted_info: response.extracted_info};
   }
 
+  async generateFormFromDescription(description: string, category: string = "", audience: string = ""): Promise<{ message: string, extracted_info: object}> {
+    const formData = new FormData();
+    formData.append('mode', 'generate-form');
+    formData.append('description', description);
+    formData.append('category', category);
+    formData.append('audience', audience);
+
+    const response = await this.callApi('rag', 'POST', formData);
+    
+    return { message: response.message, extracted_info: response.extracted_info};
+  }
+
   private determineDocumentType(fileName: string): string {
     const lowercaseName = fileName.toLowerCase();
     if (lowercaseName.includes('w2') || lowercaseName.includes('tax')) {
