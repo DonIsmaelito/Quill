@@ -13,7 +13,7 @@ out/
 
 # ─── Runtime temp & generated files ───────────────────────
 temp/
-**/temp/
+# **/temp/
 
 # ─── IDE / Editor configs ─────────────────────────────────
 .vscode/

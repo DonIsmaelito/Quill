@@ -1,0 +1,16 @@
+{
+      "id": "medical-history-form",
+      "name": "Medical History Form",
+      "category": "Clinical",
+      "uses": 142,
+      "pdfUrl": "Medical_History_Form.pdf",
+      "description":
+        "Comprehensive medical history questionnaire for clinical assessment.",
+      "tags": ["history", "clinical assessment", "medical record"],
+      "version": 2,
+      "lastEditedBy": [
+        { "name": "Bob Williams" }
+      ],
+      "lastEditedOn": "2023-10-15T12:00:00Z",
+      "fields": "[]"
+}

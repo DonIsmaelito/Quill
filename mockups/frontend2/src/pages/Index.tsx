@@ -20,6 +20,7 @@ interface FormField {
   autofillSource?: string;
   unfillable?: boolean;
   required?: boolean;
+  value?: any;
 }
 
 export default function Index() {
@@ -42,6 +43,23 @@ export default function Index() {
         setIsFormFieldsLoading(false);
       });
   }, []);
+
+  // Update form values when form fields change (for template loading)
+  useEffect(() => {
+    if (formFields.length > 0) {
+      const initialValues: Record<string, any> = {};
+      formFields.forEach(field => {
+        // Only set initial value if not already set
+        if (formValues[field.id] === undefined) {
+          initialValues[field.id] = field.value || '';
+        }
+      });
+      
+      if (Object.keys(initialValues).length > 0) {
+        setFormValues(prev => ({ ...prev, ...initialValues }));
+      }
+    }
+  }, [formFields]);
 
   const handleFileUpload = (files: File[]) => {
     const newFiles = files.map(file => ({
@@ -88,10 +106,18 @@ export default function Index() {
     }, 10000);
   };
 
+  const handleTemplateFieldsLoaded = (fields: FormField[], formValues: Record<string, any>) => {
+    console.log('Template fields loaded in Index:', fields, formValues);
+    setFormFields(fields);
+    setFormValues(formValues);
+    setIsFormFieldsLoading(false);
+  };
+
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
       <div className="w-1/3 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
         <AssistantPanel 
+          key={`assistant-${formFields.length}-${JSON.stringify(formFields.map(f => f.id))}`}
           onFileUpload={handleFileUpload}
           formFields={formFields}
           formTitle="Patient Registration Form"
@@ -109,6 +135,7 @@ export default function Index() {
             formValues={formValues}
             onChange={handleFormChange}
             highlightedFields={highlightedFields}
+            onTemplateFieldsLoaded={handleTemplateFieldsLoaded}
           />
         </div>
       </div>

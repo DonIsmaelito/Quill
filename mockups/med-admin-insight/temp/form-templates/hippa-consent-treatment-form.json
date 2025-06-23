@@ -1,0 +1,20 @@
+{
+  "id": "hippa-consent-treatment-form",
+  "name": "HIPAA Consent Treatment Form",
+  "category": "Legal",
+  "uses": 87,
+  "pdfUrl": "HIPPA_Consent_Treatment_Form.pdf",
+  "description": "Ensures patient consent and acknowledgment of HIPAA policies.",
+  "tags": [
+    "hipaa",
+    "consent",
+    "legal",
+    "privacy"
+  ],
+  "version": 5,
+  "lastEditedBy": {
+    "name": "Current User"
+  },
+  "lastEditedOn": "2025-06-23T21:23:24.613Z",
+  "fields": "[\n  {\n    \"id\": \"form-header\",\n    \"type\": \"text\",\n    \"label\": \"HIPAA Consent Treatment Form\",\n    \"required\": false,\n    \"value\": \"\",\n    \"position\": {\n      \"x\": 0,\n      \"y\": 0,\n      \"width\": 600,\n      \"height\": 48\n    }\n  },\n  {\n    \"id\": \"subheader-1750713591754\",\n    \"type\": \"text\",\n    \"label\": \"Let's see if this saves\",\n    \"required\": false,\n    \"value\": \"\",\n    \"position\": {\n      \"x\": 0,\n      \"y\": 0,\n      \"width\": 600,\n      \"height\": 36\n    }\n  },\n  {\n    \"id\": \"text-1750713632848\",\n    \"type\": \"text\",\n    \"label\": \"One more\",\n    \"required\": false,\n    \"placeholder\": \"hehe\",\n    \"value\": \"\",\n    \"position\": {\n      \"x\": 0,\n      \"y\": 0,\n      \"width\": 300,\n      \"height\": 40\n    }\n  },\n  {\n    \"id\": \"text-1750713657233\",\n    \"type\": \"text\",\n    \"label\": \"Anotha one\",\n    \"required\": false,\n    \"placeholder\": \"dj khaled\",\n    \"value\": \"\",\n    \"position\": {\n      \"x\": 0,\n      \"y\": 0,\n      \"width\": 300,\n      \"height\": 40\n    }\n  }\n]"
+}

@@ -18,8 +18,8 @@ const getFieldType = (key: string): FormField["type"] => {
 // Helper function to determine column type from key (for table fields)
 const getColumnType = (key: string): "text" | "checkbox" | "radio" | "select" | "date" | "signature" => {
   if (key.startsWith("text")) return "text";
-  if (key.startsWith("boolean")) return "checkbox";
   if (key.startsWith("date")) return "date";
+  if (key.startsWith("boolean")) return "checkbox";
   return "text"; // default to text
 };
 

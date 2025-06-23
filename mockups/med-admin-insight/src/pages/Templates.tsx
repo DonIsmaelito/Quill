@@ -45,6 +45,7 @@ interface TemplateData {
   lastEditedOn?: Date;
   complianceStatus: "ok" | "warning" | "error";
   missingConsentFields?: string[];
+  fields?: any;
 }
 
 interface TableField {
@@ -78,109 +79,50 @@ const timeAgo = (date?: Date): string => {
   return Math.floor(seconds) + "s ago";
 };
 
-// // Helper function to determine field type from key
-// const getFieldType = (key: string): FormField["type"] => {
-//   if (key.startsWith("text")) return "text";
-//   if (key.startsWith("boolean")) return "checkbox";
-//   if (key.startsWith("date")) return "date";
-//   return "text"; // default to text
-// };
-
-// // Helper function to determine column type from key (for table fields)
-// const getColumnType = (key: string): "text" | "checkbox" | "radio" | "select" | "date" | "signature" => {
-//   if (key.startsWith("text")) return "text";
-//   if (key.startsWith("boolean")) return "checkbox";
-//   if (key.startsWith("date")) return "date";
-//   return "text"; // default to text
-// };
-
-// // Helper function to process nested form data
-// const processFormData = (
-//   data: any,
-//   parentId: string = "",
-//   level: number = 0
-// ): FormField[] => {
-//   const fields: FormField[] = [];
-//   let yOffset = 0;
-
-//   for (const [key, value] of Object.entries(data)) {
-//     const currentId = parentId ? `${parentId}-${key}` : key;
+// Helper function to load templates from JSON files
+const loadTemplatesFromJson = async (): Promise<TemplateData[]> => {
+  try {
+    // Use Vite's import.meta.glob to dynamically import all JSON files
+    const templateModules = import.meta.glob('../../temp/form-templates/*.json', { eager: true });
     
-//     // If the value is an object and not a field type (text, boolean, date, table)
-//     if (typeof value === "object" && value !== null && !key.match(/^(text|boolean|date|table)\d+$/)) {
-//       // Add header as a text field with special styling
-//       fields.push({
-//         id: currentId,
-//         type: "text",
-//         label: key,
-//         required: false,
-//         value: "",
-//         position: {
-//           x: 0,
-//           y: yOffset,
-//           width: 600,
-//           height: level === 0 ? 48 : 36
-//         }
-//       });
-//       yOffset += level === 0 ? 60 : 48;
-
-//       // Process children
-//       const childFields = processFormData(value, currentId, level + 1);
-//       fields.push(...childFields);
-//       yOffset += childFields.length * 48; // Approximate height for child fields
-//     } else if (key.match(/^(text|boolean|date|table)\d+$/)) {
-//       if (key.startsWith("table")) {
-//         // Process table fields
-//         const tableFields: TableField[] = [];
-//         for (const [colKey, colValue] of Object.entries(value)) {
-//           const colType = getColumnType(colKey);
-//           tableFields.push({
-//             id: `${currentId}-${colKey}`,
-//             type: colType,
-//             label: Object.keys(colValue)[0],
-//             value: colType === "checkbox" ? false : ""
-//           });
-//         }
-
-//         // Add table as a text field with table data
-//         fields.push({
-//           id: currentId,
-//           type: "text",
-//           label: "", // Empty label for table type
-//           required: false,
-//           value: JSON.stringify(tableFields), // Store table data as JSON string
-//           position: {
-//             x: 0,
-//             y: yOffset,
-//             width: 600,
-//             height: 200 // Height for table with one row
-//           }
-//         });
-//         yOffset += 220; // Table height + margin
-//       } else {
-//         // Process regular fields
-//         const fieldType = getFieldType(key);
-//         const fieldLabel = Object.keys(value)[0];
-//         fields.push({
-//           id: currentId,
-//           type: fieldType,
-//           label: fieldLabel,
-//           required: false,
-//           value: fieldType === "checkbox" ? false : "",
-//           position: {
-//             x: 0,
-//             y: yOffset,
-//             width: 300,
-//             height: 40
-//           }
-//         });
-//         yOffset += 48; // Field height + margin
-//       }
-//     }
-//   }
-
-//   return fields;
-// };
+    console.log('Template modules found:', Object.keys(templateModules));
+    
+    const templates: TemplateData[] = [];
+    
+    for (const path in templateModules) {
+      const template = (templateModules[path] as any).default || templateModules[path];
+      console.log('Processing template:', path, template);
+    
+      // Parse the lastEditedOn date string to Date object
+      const lastEditedOn = template.lastEditedOn ? new Date(template.lastEditedOn) : undefined;
+      
+      // Handle different lastEditedBy formats (object vs array)
+      let lastEditedBy: LastEditedBy | undefined;
+      if (template.lastEditedBy) {
+        if (Array.isArray(template.lastEditedBy)) {
+          lastEditedBy = template.lastEditedBy[0];
+        } else {
+          lastEditedBy = template.lastEditedBy;
+        }
+      }
+      
+      templates.push({
+        ...template,
+        lastEditedOn,
+        lastEditedBy,
+        signatureFields: [], // Add default empty array
+        complianceStatus: "ok" as const, // Add default compliance status
+        missingConsentFields: [], // Add default empty array
+      } as TemplateData);
+    }
+    
+    console.log('Loaded templates:', templates);
+    return templates;
+  } catch (error) {
+    console.error("Error loading templates:", error);
+    return [];
+  }
+};
 
 export default function Templates() {
   const navigate = useNavigate();
@@ -191,74 +133,314 @@ export default function Templates() {
   const [searchTerm, setSearchTerm] = useState("");
   const [extractedFields, setExtractedFields] = useState<FormField[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [templates, setTemplates] = useState<TemplateData[]>([
-    {
-      id: "medical-history-form",
-      name: "Medical History Form",
-      category: "Clinical",
-      uses: 142,
-      pdfUrl: "Medical_History_Form.pdf",
-      description:
-        "Comprehensive medical history questionnaire for clinical assessment.",
-      tags: ["history", "clinical assessment", "medical record"],
-      signatureFields: ["patient"],
-      version: 2,
-      lastEditedBy: { name: "Bob Williams" },
-      lastEditedOn: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-      complianceStatus: "warning",
-      missingConsentFields: ["Minor Consent Section"],
-    },
-    {
-      id: "hippa-consent-treatment-form",
-      name: "HIPAA Consent Treatment Form",
-      category: "Legal",
-      uses: 87,
-      pdfUrl: "HIPPA_Consent_Treatment_Form.pdf",
-      description:
-        "Ensures patient consent and acknowledgment of HIPAA policies.",
-      tags: ["hipaa", "consent", "legal", "privacy"],
-      signatureFields: ["patient", "witness"],
-      version: 5,
-      lastEditedBy: { name: "Carol Davis", avatarUrl: "/avatars/02.png" },
-      lastEditedOn: new Date(Date.now() - 10 * 60 * 1000),
-      complianceStatus: "ok",
-    },
-    {
-      id: "caregiver-contact-form",
-      name: "Caregiver Contact Form",
-      category: "Administrative",
-      uses: 98,
-      pdfUrl: "Caregiver_Contact_Form.pdf",
-      description:
-        "Collects contact information for designated patient caregivers.",
-      tags: ["contact", "caregiver"],
-      signatureFields: ["patient representative"],
-      version: 1,
-      lastEditedOn: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      complianceStatus: "error",
-      missingConsentFields: ["Section A.1", "Section C.4"],
-    },
-    {
-      id: "post-op-instructions",
-      name: "Post-Operative Instructions",
-      category: "Clinical",
-      uses: 75,
-      pdfUrl: "Patient_Intake_Form.pdf",
-      description:
-        "Detailed instructions for patients after undergoing a surgical procedure.",
-      tags: ["post-op", "instructions", "aftercare"],
-      signatureFields: ["physician"],
-      version: 2,
-      lastEditedBy: { name: "Dr. Smith", avatarUrl: "/avatars/03.png" },
-      lastEditedOn: new Date(Date.now() - 1 * 60 * 60 * 1000),
-      complianceStatus: "ok",
-    },
-  ]);
+  const [templates, setTemplates] = useState<TemplateData[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUseTemplate = (template: TemplateData) => {
+  // Helper function to save template data back to JSON file
+  const saveTemplateToFile = async (templateId: string, updatedData: any) => {
+    try {
+      // Try to use the development server API to update the file in place
+      const response = await fetch('/api/update-template', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId,
+          data: updatedData
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          console.log(`Template ${templateId} updated in place via development server`);
+          return true;
+        } else {
+          console.error('Server returned error:', result.error);
+        }
+      } else {
+        console.warn('Development server API not available, falling back to download');
+      }
+      
+      // Fallback: Create a download with instructions
+      const jsonString = JSON.stringify(updatedData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${templateId}.json`;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      URL.revokeObjectURL(url);
+      
+      // Show user instructions
+      alert(`Template ${templateId} has been downloaded. Please replace the original file at temp/form-templates/${templateId}.json with this downloaded file.`);
+      
+      console.log(`Template ${templateId} downloaded (fallback mode)`);
+      return true;
+    } catch (error) {
+      console.error('Error saving template:', error);
+      
+      // Final fallback: just download the file
+      try {
+        const jsonString = JSON.stringify(updatedData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${templateId}.json`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        alert(`Template ${templateId} has been downloaded. Please replace the original file at temp/form-templates/${templateId}.json with this downloaded file.`);
+        return true;
+      } catch (downloadError) {
+        console.error('Error downloading file:', downloadError);
+        return false;
+      }
+    }
+  };
+
+  // Helper function to reload templates from JSON files
+  const reloadTemplates = async () => {
+    try {
+      const loadedTemplates = await loadTemplatesFromJson();
+      setTemplates(loadedTemplates);
+      console.log('Templates reloaded successfully');
+    } catch (error) {
+      console.error('Error reloading templates:', error);
+    }
+  };
+
+  // Helper function to update template data with new fields
+  const updateTemplateFields = async (templateId: string, fields: FormField[]) => {
+    try {
+      setIsSaving(true);
+      setSaveStatus("Saving changes...");
+      
+      // Get the current template
+      const currentTemplate = templates.find(t => t.id === templateId);
+      if (!currentTemplate) {
+        console.error('Template not found:', templateId);
+        setSaveStatus("Error: Template not found");
+        return false;
+      }
+      
+      // Create updated template data with the FormField array as stringified JSON
+      const updatedTemplateData = {
+        ...currentTemplate,
+        fields: JSON.stringify(fields, null, 2), // Save FormField array as stringified JSON
+        lastEditedOn: new Date().toISOString(),
+        lastEditedBy: { name: "Current User" }
+      };
+      
+      // Remove properties that shouldn't be in the JSON file
+      delete updatedTemplateData.complianceStatus;
+      delete updatedTemplateData.missingConsentFields;
+      delete updatedTemplateData.signatureFields;
+      
+      // Save to file
+      const success = await saveTemplateToFile(templateId, updatedTemplateData);
+      
+      if (success) {
+        // Update the local state
+        setTemplates(prev => prev.map(t => 
+          t.id === templateId 
+            ? { ...t, fields: JSON.stringify(fields, null, 2), lastEditedOn: new Date() }
+            : t
+        ));
+        
+        // Reload templates to ensure we have the latest data
+        setTimeout(() => {
+          reloadTemplates();
+        }, 1000);
+        
+        setSaveStatus("Changes saved successfully!");
+        setTimeout(() => setSaveStatus(""), 3000);
+      } else {
+        setSaveStatus("Error saving changes");
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Error updating template fields:', error);
+      setSaveStatus("Error saving changes");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Manual save function
+  const handleManualSave = async () => {
+    if (selectedTemplateId && extractedFields.length > 0) {
+      // Check if this is an uploaded template (starts with "uploaded-")
+      if (selectedTemplateId.startsWith("uploaded-")) {
+        // For uploaded templates, just update the local state
+        setTemplates(prev => prev.map(t => 
+          t.id === selectedTemplateId 
+            ? { ...t, fields: JSON.stringify(extractedFields, null, 2), lastEditedOn: new Date() }
+            : t
+        ));
+        setSaveStatus("Changes saved to local template!");
+        setTimeout(() => setSaveStatus(""), 3000);
+      } else {
+        // For regular templates, save to file
+        await updateTemplateFields(selectedTemplateId, extractedFields);
+      }
+    }
+  };
+
+  // Load templates from JSON files on component mount
+  useEffect(() => {
+    const loadTemplates = async () => {
+      setIsLoadingTemplates(true);
+      try {
+        const loadedTemplates = await loadTemplatesFromJson();
+        setTemplates(loadedTemplates);
+      } catch (error) {
+        console.error("Error loading templates:", error);
+      } finally {
+        setIsLoadingTemplates(false);
+      }
+    };
+    loadTemplates();
+  }, []);
+
+  const handleUseTemplate = async (template: TemplateData) => {
     setSelectedPdfUrl(template.pdfUrl);
     setSelectedTemplateId(template.id);
+    
+    // For regular templates (not uploaded), refresh the template data to get the latest fields
+    if (!template.id.startsWith("uploaded-")) {
+      try {
+        // Reload templates to get the latest data from disk
+        const updatedTemplates = await loadTemplatesFromJson();
+        const updatedTemplate = updatedTemplates.find(t => t.id === template.id);
+        if (updatedTemplate) {
+          template = updatedTemplate; // Use the updated template data
+        }
+      } catch (error) {
+        console.error("Error refreshing template data:", error);
+      }
+    }
+    
+    // If the template has fields data, process it
+    if (template.fields) {
+      try {
+        let fields: FormField[];
+        
+        // Check if fields is a string (new format) or object (old format)
+        if (typeof template.fields === 'string') {
+          // New format: fields is a stringified FormField array
+          fields = JSON.parse(template.fields);
+        } else {
+          // Old format: fields is a hierarchical object, need to process it
+          fields = processFormData(template.fields);
+        }
+        
+        // Only add default header if the form is truly empty (no fields at all)
+        if (fields.length === 0) {
+          const defaultHeader: FormField = {
+            id: "form-header",
+            type: "text",
+            label: template.name,
+            required: false,
+            value: "",
+            position: {
+              x: 0,
+              y: 0,
+              width: 600,
+              height: 48
+            }
+          };
+          fields = [defaultHeader];
+          
+          // Save the default header to the template
+          setTimeout(() => {
+            if (template.id) {
+              if (template.id.startsWith("uploaded-")) {
+                // For uploaded templates, just update local state
+                setTemplates(prev => prev.map(t => 
+                  t.id === template.id 
+                    ? { ...t, fields: JSON.stringify([defaultHeader], null, 2), lastEditedOn: new Date() }
+                    : t
+                ));
+              } else {
+                // For regular templates, save to file
+                updateTemplateFields(template.id, [defaultHeader]);
+              }
+            }
+          }, 100);
+        }
+        
+        // Set the fields (either original or with default header)
+        setExtractedFields(fields);
+      } catch (error) {
+        console.error("Error processing template fields:", error);
+        
+        // If there was an error, add a default header
+        const defaultHeader: FormField = {
+          id: "form-header",
+          type: "text",
+          label: template.name,
+          required: false,
+          value: "",
+          position: {
+            x: 0,
+            y: 0,
+            width: 600,
+            height: 48
+          }
+        };
+        setExtractedFields([defaultHeader]);
+      }
+    } else {
+      // No fields data, add a default header with the template name
+      const defaultHeader: FormField = {
+        id: "form-header",
+        type: "text",
+        label: template.name,
+        required: false,
+        value: "",
+        position: {
+          x: 0,
+          y: 0,
+          width: 600,
+          height: 48
+        }
+      };
+      setExtractedFields([defaultHeader]);
+      
+      // Save the default header to the template
+      setTimeout(() => {
+        if (template.id) {
+          if (template.id.startsWith("uploaded-")) {
+            // For uploaded templates, just update local state
+            setTemplates(prev => prev.map(t => 
+              t.id === template.id 
+                ? { ...t, fields: JSON.stringify([defaultHeader], null, 2), lastEditedOn: new Date() }
+                : t
+            ));
+          } else {
+            // For regular templates, save to file
+            updateTemplateFields(template.id, [defaultHeader]);
+          }
+        }
+      }, 100);
+    }
   };
 
   const handleBackToTemplates = () => {
@@ -310,6 +492,20 @@ export default function Templates() {
         // Process the hierarchical form data
         const fields = processFormData(response.extracted_info);
         setExtractedFields(fields);
+        
+        // Save the initial template with extracted fields in new format
+        const templateWithFields = {
+          ...newTemplate,
+          fields: JSON.stringify(fields, null, 2) // Save as stringified JSON
+        };
+        
+        // Update the template in state with fields
+        setTemplates(prev => prev.map(t => 
+          t.id === newTemplate.id 
+            ? { ...t, fields: JSON.stringify(fields, null, 2) }
+            : t
+        ));
+        
       } catch (error) {
         console.error("Error processing PDF:", error);
         alert("Error processing PDF. Please try again.");
@@ -394,37 +590,110 @@ export default function Templates() {
                         <p className="text-medical-text">Processing PDF...</p>
                       </div>
                     </div>
-                  ) : extractedFields.length > 0 ? (
+                  ) : (
                     <DigitizedForm 
                       fields={extractedFields} 
-                      onDeleteField={(fieldId) => {
-                        setExtractedFields(prev => prev.filter(field => field.id !== fieldId));
+                      onDeleteField={async (fieldId) => {
+                        const newFields = extractedFields.filter(field => field.id !== fieldId);
+                        setExtractedFields(newFields);
+                        
+                        // Save changes to template if we have a selected template
+                        if (selectedTemplateId) {
+                          if (selectedTemplateId.startsWith("uploaded-")) {
+                            // For uploaded templates, just update local state
+                            setTemplates(prev => prev.map(t => 
+                              t.id === selectedTemplateId 
+                                ? { ...t, fields: JSON.stringify(newFields, null, 2), lastEditedOn: new Date() }
+                                : t
+                            ));
+                          } else {
+                            // For regular templates, save to file
+                            await updateTemplateFields(selectedTemplateId, newFields);
+                          }
+                        }
                       }}
-                      onAddField={(newField, index) => {
-                        setExtractedFields(prev => {
-                          const newFields = [...prev];
+                      onAddField={async (newField, index) => {
+                        const newFields = [...extractedFields];
                           newFields.splice(index, 0, newField);
-                          return newFields;
-                        });
+                        setExtractedFields(newFields);
+                        
+                        // Save changes to template if we have a selected template
+                        if (selectedTemplateId) {
+                          if (selectedTemplateId.startsWith("uploaded-")) {
+                            // For uploaded templates, just update local state
+                            setTemplates(prev => prev.map(t => 
+                              t.id === selectedTemplateId 
+                                ? { ...t, fields: JSON.stringify(newFields, null, 2), lastEditedOn: new Date() }
+                                : t
+                            ));
+                          } else {
+                            // For regular templates, save to file
+                            await updateTemplateFields(selectedTemplateId, newFields);
+                          }
+                        }
                       }}
-                      onEditField={(fieldId, updates) => {
-                        setExtractedFields(prev => 
-                          prev.map(field => 
+                      onEditField={async (fieldId, updates) => {
+                        const newFields = extractedFields.map(field => 
                             field.id === fieldId 
                               ? { ...field, ...updates }
                               : field
-                          )
                         );
+                        setExtractedFields(newFields);
+                        
+                        // Save changes to template if we have a selected template
+                        if (selectedTemplateId) {
+                          if (selectedTemplateId.startsWith("uploaded-")) {
+                            // For uploaded templates, just update local state
+                            setTemplates(prev => prev.map(t => 
+                              t.id === selectedTemplateId 
+                                ? { ...t, fields: JSON.stringify(newFields, null, 2), lastEditedOn: new Date() }
+                                : t
+                            ));
+                          } else {
+                            // For regular templates, save to file
+                            await updateTemplateFields(selectedTemplateId, newFields);
+                          }
+                        }
                       }}
                     />
-                  ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <p className="text-gray-500">No form fields extracted yet</p>
-                    </div>
                   )}
                 </div>
               </div>
               <div className="text-center mt-6">
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  {saveStatus && (
+                    <div className={cn(
+                      "px-4 py-2 rounded-lg text-sm font-medium",
+                      saveStatus.includes("Error") 
+                        ? "bg-red-100 text-red-700" 
+                        : saveStatus.includes("saved successfully")
+                        ? "bg-green-100 text-green-700"
+                        : "bg-blue-100 text-blue-700"
+                    )}>
+                      {saveStatus}
+                    </div>
+                  )}
+                  {selectedTemplateId && extractedFields.length > 0 && (
+                    <Button
+                      onClick={handleManualSave}
+                      disabled={isSaving}
+                      variant="outline"
+                      className="flex items-center gap-2"
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="h-4 w-4" />
+                          Save Template
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
                 <Button
                   onClick={handleProceed}
                   className="bg-medical-primary hover:bg-medical-primary/90 px-8 py-3 text-base"
@@ -475,7 +744,14 @@ export default function Templates() {
               </div>
 
               <div className="bg-white p-6 rounded-xl shadow-lg">
-                {filteredTemplates.length > 0 ? (
+                {isLoadingTemplates ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-primary mx-auto mb-4"></div>
+                      <p className="text-medical-text">Loading templates...</p>
+                    </div>
+                  </div>
+                ) : filteredTemplates.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
                     {filteredTemplates.map((template) => (
                       <div
@@ -612,7 +888,10 @@ export default function Templates() {
                   </div>
                 ) : (
                   <p className="text-center text-gray-500 py-16">
-                    No templates found matching your search.
+                    {templates.length === 0 
+                      ? "No templates found. Upload a template to get started."
+                      : "No templates found matching your search."
+                    }
                   </p>
                 )}
               </div>

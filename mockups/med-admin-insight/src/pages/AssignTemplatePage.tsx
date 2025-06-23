@@ -4,13 +4,19 @@ import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { patientsData, Patient } from "@/data/patients"; // Assuming Patient type is exported from patients.ts
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, CheckCircle, XCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function AssignTemplatePage() {
   const { templateId } = useParams<{ templateId: string }>();
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredPatients, setFilteredPatients] =
     useState<Patient[]>(patientsData);
+  const [toast, setToast] = useState<{
+    show: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({ show: false, message: '', type: 'success' });
 
   useEffect(() => {
     if (searchTerm === "") {
@@ -27,6 +33,37 @@ export default function AssignTemplatePage() {
   // Find the template name based on templateId (optional, for display)
   // This assumes your templates array in Templates.tsx is accessible or you have another way to get names
   // For now, we'll just display the ID.
+
+  // Toast notification component
+  const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) => (
+    <div className="fixed top-4 right-4 z-50 flex items-center gap-3 bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 min-w-[300px] animate-in slide-in-from-right duration-300">
+      {type === 'success' ? (
+        <CheckCircle className="h-5 w-5 text-green-500" />
+      ) : (
+        <XCircle className="h-5 w-5 text-red-500" />
+      )}
+      <p className={cn(
+        "text-sm font-medium",
+        type === 'success' ? 'text-green-700' : 'text-red-700'
+      )}>
+        {message}
+      </p>
+      <button
+        onClick={onClose}
+        className="ml-auto text-gray-400 hover:text-gray-600"
+      >
+        <XCircle className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
+  // Show toast function
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 5000);
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50">
@@ -89,42 +126,80 @@ export default function AssignTemplatePage() {
                       size="sm"
                       onClick={async () => {
                         if (!templateId) return;
-                        const assignment = {
-                          templateId,
-                          patientId: patient.id,
-                          patientName: patient.name,
-                          assignedAt: new Date().toISOString(),
-                        };
-
+                        
+                        // For demo purposes, use the specified email
+                        const patientEmail = "fernandesi2244@gmail.com";
+                        const formUrl = "http://localhost:5173/";
+                        
+                        // Get template name (you might want to load this from your templates data)
+                        const templateName = templateId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        
                         try {
-                          const res = await fetch(
-                            "http://localhost:5173/api/assign",
-                            {
+                          // Send form request email
+                          const emailRes = await fetch("/api/send-form-email", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                              patientEmail,
+                              patientName: patient.name,
+                              templateName,
+                              templateId
+                            }),
+                          });
+
+                          if (!emailRes.ok) {
+                            const err = await emailRes.json();
+                            throw new Error(err?.error || "Failed to send email");
+                          }
+
+                          const emailData = await emailRes.json();
+                          
+                          // Also save the assignment record (optional)
+                          const assignment = {
+                            templateId,
+                            patientId: patient.id,
+                            patientName: patient.name,
+                            patientEmail,
+                            assignedAt: new Date().toISOString(),
+                          };
+
+                          try {
+                            const assignRes = await fetch("/api/assign", {
                               method: "POST",
                               headers: {
                                 "Content-Type": "application/json",
                               },
                               body: JSON.stringify(assignment),
+                            });
+
+                            if (assignRes.ok) {
+                              const assignData = await assignRes.json();
+                              showToast(
+                                `Form request sent successfully to ${patient.name} (${patientEmail})!`,
+                                'success'
+                              );
                             }
-                          );
-
-                          if (!res.ok) {
-                            const err = await res.json();
-                            throw new Error(err?.error || "Failed to assign");
+                          } catch (assignError) {
+                            // Assignment save failed, but email was sent
+                            console.warn("Assignment save failed:", assignError);
+                            showToast(
+                              `Form request sent successfully to ${patient.name} (${patientEmail})!`,
+                              'success'
+                            );
                           }
-
-                          const data = await res.json();
-                          alert(
-                            `Template assigned successfully! Saved as ${data.filename}`
-                          );
                         } catch (error: any) {
                           console.error(error);
-                          alert(`Error assigning template: ${error.message}`);
+                          showToast(
+                            `Error sending form request: ${error.message}`,
+                            'error'
+                          );
                         }
                       }}
                     >
                       <UserPlus className="h-4 w-4 mr-2" />
-                      Assign
+                      Send Form Request
                     </Button>
                   </li>
                 ))
@@ -137,6 +212,13 @@ export default function AssignTemplatePage() {
           </div>
         </div>
       </div>
+      {toast.show && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ show: false, message: '', type: 'success' })}
+        />
+      )}
     </div>
   );
 }

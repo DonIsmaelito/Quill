@@ -18,6 +18,7 @@ import AppearanceSettings from "./components/settings/AppearanceSettings";
 import NotificationSettings from "./components/settings/NotificationSettings";
 import DoctorsDirectory from "./pages/DoctorsDirectory";
 import AssignTemplatePage from "./pages/AssignTemplatePage";
+import ReadOnlyFormViewer from "./components/ReadOnlyFormViewer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,10 @@ const App = () => (
           <Route
             path="/assign-template/:templateId"
             element={<AssignTemplatePage />}
+          />
+          <Route
+            path="/view-filled-form/:formId"
+            element={<ReadOnlyFormViewer />}
           />
           <Route path="*" element={<NotFound />} />
         </Routes>

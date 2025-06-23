@@ -107,6 +107,7 @@ export function AssistantPanel({
     setMessages((prev) => [...prev, newMessage]);
   };
 
+  // Reset messages and formValuesRef when formFields changes
   useEffect(() => {
     const welcomeMessage = generateWelcomeMessage(formTitle, formFields);
     setMessages([
@@ -117,9 +118,30 @@ export function AssistantPanel({
         timestamp: new Date(),
       },
     ]);
-    // Set the welcome message in the ragService
     ragService.setWelcomeMessage(welcomeMessage);
-  }, [formTitle, formFields]);
+    // Reset formValuesRef to match the new fields
+    formValuesRef.current = {};
+    formFields.forEach(field => {
+      formValuesRef.current[field.id] = formValues[field.id] || field.value || "";
+    });
+  }, [formFields, formTitle]);
+
+  // Update form fields reference when they change
+  useEffect(() => {
+    if (formFields.length > 0) {
+      // Update the form fields in the ragService
+      const currentFormFields = formFields.map((field) => ({
+        id: field.id,
+        label: field.label,
+        value: formValuesRef.current[field.id] || "MISSING",
+      }));
+      
+      // Send updated form fields to WebSocket if connected
+      sendFormFieldsToWebSocket();
+      
+      console.log('AssistantPanel: Form fields updated:', currentFormFields);
+    }
+  }, [formFields]);
 
   // DISABLED: Auto-fill form on initial load (per user request to remove "refresh autofill" feature)
   /*
@@ -301,6 +323,13 @@ export function AssistantPanel({
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
     try {
+      // Always use the latest formFields and formValues from props
+      const currentFormFields = formFields.map((field) => ({
+        id: field.id,
+        label: field.label,
+        value: formValues[field.id] || "",
+      }));
+
       // Add user message to UI
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -311,13 +340,6 @@ export function AssistantPanel({
       setMessages((prev) => [...prev, userMessage]);
       setInput("");
       setIsProcessing(true);
-
-      // Get current form field values using the ref for stability
-      const currentFormFields = formFields.map((field) => ({
-        id: field.id,
-        label: field.label,
-        value: formValuesRef.current[field.id] || "",
-      }));
 
       // Process message with form fields
       const response = await ragService.processUserMessage(
@@ -1012,13 +1034,6 @@ export function AssistantPanel({
       console.log("Sent form fields to WebSocket:", currentFormFields);
     }
   };
-
-  // Send form fields when they change
-  useEffect(() => {
-    if (formFields.length > 0) {
-      sendFormFieldsToWebSocket();
-    }
-  }, [formFields, formValues]);
 
   // Voice recording functionality
   const startRecording = async () => {

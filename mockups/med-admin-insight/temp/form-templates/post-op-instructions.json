@@ -1,0 +1,13 @@
+{
+    "id": "post-op-instructions",
+    "name": "Post-Operative Instructions",
+    "category": "Clinical",
+    "uses": 75,
+    "pdfUrl": "Patient_Intake_Form.pdf",
+    "description": "Detailed instructions for patients after undergoing a surgical procedure.",
+    "tags": ["post-op", "instructions", "aftercare"],
+    "version": 2,
+    "lastEditedBy": { "name": "Dr. Smith", "avatarUrl": "/avatars/03.png" },
+    "lastEditedOn": "2023-10-20T14:30:00Z",
+    "fields": "[]"
+}
