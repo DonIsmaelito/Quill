@@ -84,35 +84,35 @@ export default function CreateForm() {
       alert("Please describe the form you need.");
       return;
     }
-    
+
     setIsGenerating(true);
-    
+
     try {
       console.log("Generating form with AI...", {
         formDescription,
         selectedCategory,
         selectedAudience,
       });
-      
+
       // Call the new AI form generation endpoint
       const response = await ragService.generateFormFromDescription(
         formDescription,
         selectedCategory,
         selectedAudience
       );
-      
+
       console.log("AI generated form response:", response);
-      
+
       // Process the hierarchical form data
       const fields = processFormData(response.extracted_info);
-      
+
       console.log("Processed fields:", fields);
 
       setGeneratedFields(fields);
-      
+
       // Set a mock PDF preview URL for now (in a real implementation, this would be generated)
       setMockPdfPreviewUrl("/Patient_Intake_Form.pdf");
-      
+
       setCurrentStep("editAI");
     } catch (error) {
       console.error("Error generating form with AI:", error);
@@ -125,7 +125,7 @@ export default function CreateForm() {
   const handleRegenerate = async () => {
     console.log("Regenerating form...");
     setIsGenerating(true);
-    
+
     try {
       // Call the AI generation again with the same parameters
       const response = await ragService.generateFormFromDescription(
@@ -133,11 +133,11 @@ export default function CreateForm() {
         selectedCategory,
         selectedAudience
       );
-      
+
       // Process the hierarchical form data
       const fields = processFormData(response.extracted_info);
       setGeneratedFields(fields);
-      
+
       // Update the mock PDF preview URL
       setMockPdfPreviewUrl("/Medical_History_Form.pdf");
     } catch (error) {
@@ -174,7 +174,7 @@ export default function CreateForm() {
               Create New Form with AI
             </h1>
             <p className="text-medical-subtext text-base mt-1 leading-snug">
-              Let MedMinute AI draft your form based on your needs.
+              Let our AI draft your form based on your needs.
             </p>
           </div>
 
@@ -265,7 +265,8 @@ export default function CreateForm() {
                   >
                     {isGenerating ? (
                       <>
-                        <RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Generating...
+                        <RefreshCw className="h-5 w-5 mr-2 animate-spin" />{" "}
+                        Generating...
                       </>
                     ) : (
                       <>
@@ -308,22 +309,24 @@ export default function CreateForm() {
                     </div>
                     <div className="w-full border rounded-lg overflow-hidden shadow-md bg-white">
                       {generatedFields.length > 0 ? (
-                        <DigitizedForm 
-                          fields={generatedFields} 
+                        <DigitizedForm
+                          fields={generatedFields}
                           onDeleteField={(fieldId) => {
-                            setGeneratedFields(prev => prev.filter(field => field.id !== fieldId));
+                            setGeneratedFields((prev) =>
+                              prev.filter((field) => field.id !== fieldId)
+                            );
                           }}
                           onAddField={(newField, index) => {
-                            setGeneratedFields(prev => {
+                            setGeneratedFields((prev) => {
                               const newFields = [...prev];
                               newFields.splice(index, 0, newField);
                               return newFields;
                             });
                           }}
                           onEditField={(fieldId, updates) => {
-                            setGeneratedFields(prev => 
-                              prev.map(field => 
-                                field.id === fieldId 
+                            setGeneratedFields((prev) =>
+                              prev.map((field) =>
+                                field.id === fieldId
                                   ? { ...field, ...updates }
                                   : field
                               )
@@ -332,7 +335,9 @@ export default function CreateForm() {
                         />
                       ) : (
                         <div className="flex items-center justify-center h-64">
-                          <p className="text-gray-500">No fields generated yet</p>
+                          <p className="text-gray-500">
+                            No fields generated yet
+                          </p>
                         </div>
                       )}
                     </div>
@@ -348,7 +353,8 @@ export default function CreateForm() {
                   >
                     {isGenerating ? (
                       <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Regenerating...
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />{" "}
+                        Regenerating...
                       </>
                     ) : (
                       <>

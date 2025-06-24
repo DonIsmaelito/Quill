@@ -113,5 +113,12 @@
     "policyNumber": "BCBS123456789",
     "groupNumber": "GRP987654321",
     "allowReleaseOfInformation": "Yes",
-    "date": "04/11/2025"
+    "date": "04/11/2025",
+    "patientAddressStreet": "123 Main Street",
+    "patientAddressApt": "Apt 2B",
+    "patientAddressCity": "Springfield",
+    "patientAddressState": "IL",
+    "patientAddressZipCode": "62704",
+    "allowReleaseToInsurance": "Yes",
+    "dateOfSignature": "04/11/2025"
 }

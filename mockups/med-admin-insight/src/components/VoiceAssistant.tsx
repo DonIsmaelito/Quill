@@ -7,6 +7,7 @@ import {
   Loader2,
   Volume2,
   Stethoscope,
+  Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,6 +32,21 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
   const [currentTranscript, setCurrentTranscript] = useState<string | null>(
     null
   );
+
+  // Manual text input
+  const [manualInput, setManualInput] = useState("");
+
+  // Panel resizing
+  const DEFAULT_SIZE = { width: 384, height: 600 }; // Tailwind w-96 and max-h-600px
+  const [panelSize, setPanelSize] = useState<{ width: number; height: number }>(
+    DEFAULT_SIZE
+  );
+  const resizeRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -96,6 +112,9 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
             ...prev,
             { type: "assistant", content: msg.content },
           ]);
+
+          // Stop processing spinner now that we have a response (audio may follow)
+          setIsProcessing(false);
 
           // Update current patient if provided
           if (msg.current_patient) {
@@ -286,6 +305,74 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
     return "text-gray-500";
   };
 
+  // ---------------- Manual Text Query ------------------
+  const sendManualQuery = () => {
+    const text = manualInput.trim();
+    if (!text) return;
+
+    // Ensure WebSocket open
+    const ws = initWebSocket();
+
+    if (ws.readyState !== WebSocket.OPEN) {
+      setError("Connection not established.");
+      return;
+    }
+
+    // Add to conversation immediately
+    setConversation((prev) => [...prev, { type: "user", content: text }]);
+
+    ws.send(
+      JSON.stringify({
+        type: "text_query",
+        transcript: text,
+      })
+    );
+
+    setManualInput("");
+    setIsProcessing(true);
+  };
+
+  // Handle Enter key in input
+  const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendManualQuery();
+    }
+  };
+
+  // ---------------- Resizing ---------------------------
+  const onResizeMouseDown = (e: React.MouseEvent) => {
+    resizeRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: panelSize.width,
+      startH: panelSize.height,
+    };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const dx = ev.clientX - resizeRef.current.startX;
+      const dy = ev.clientY - resizeRef.current.startY;
+      setPanelSize({
+        width: Math.max(320, resizeRef.current.startW + dx),
+        height: Math.max(400, resizeRef.current.startH - dy), // dragging up increases height
+      });
+    };
+
+    const onMouseUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  const minimizePanel = () => {
+    setPanelSize(DEFAULT_SIZE);
+  };
+
   return (
     <>
       {/* Floating Voice Button */}
@@ -317,9 +404,12 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
 
       {/* Voice Assistant Panel */}
       {isOpen && (
-        <Card className="fixed bottom-24 left-6 w-96 max-h-[600px] shadow-2xl z-50 flex flex-col">
+        <Card
+          className="fixed bottom-24 left-6 shadow-2xl z-50 flex flex-col"
+          style={{ width: panelSize.width, height: panelSize.height }}
+        >
           {/* Header */}
-          <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950">
+          <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 relative">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-lg">Medical Assistant</h3>
@@ -329,19 +419,36 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
                     : "No patient selected"}
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={toggleVoiceAssistant}
-                className="h-8 w-8 p-0"
-              >
-                <PhoneOff className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                {panelSize.width !== DEFAULT_SIZE.width && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={minimizePanel}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Minimize2 className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={toggleVoiceAssistant}
+                  className="h-8 w-8 p-0"
+                >
+                  <PhoneOff className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+            {/* Resize handle */}
+            <div
+              onMouseDown={onResizeMouseDown}
+              className="absolute -top-1 right-0 w-4 h-4 cursor-nwse-resize"
+            />
           </div>
 
           {/* Conversation */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[400px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {conversation.map((msg, idx) => (
               <div
                 key={idx}
@@ -362,6 +469,25 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Manual Input */}
+          <div className="p-3 border-t bg-white dark:bg-gray-800 flex items-center gap-2">
+            <input
+              className="flex-1 border rounded-md px-2 py-1 text-sm dark:bg-gray-900 dark:border-gray-700"
+              placeholder="Type your question..."
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              onKeyDown={onInputKeyDown}
+              disabled={isProcessing}
+            />
+            <Button
+              size="sm"
+              onClick={sendManualQuery}
+              disabled={isProcessing || !manualInput.trim()}
+            >
+              Send
+            </Button>
           </div>
 
           {/* Status Bar */}

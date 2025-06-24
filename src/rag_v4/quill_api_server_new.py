@@ -70,6 +70,70 @@ USER_INFO_JSON = os.path.join('..', 'uploads', 'user_info.json')
 # UPLOADS_DIR = "/../uploads"
 UPLOADS_DIR = os.path.join('..', 'uploads')
 
+# Directory where the frontend saves submitted forms as JSON
+FILLED_FORMS_DIR = os.path.join('..', 'mockups', 'frontend2', 'temp', 'filled-forms')
+
+def load_filled_forms(directory: str) -> List[Dict[str, Any]]:
+    forms: List[Dict[str, Any]] = []
+    if not os.path.isdir(directory):
+        logging.warning(f"Filled forms directory not found: {directory}")
+        return forms
+
+    for filename in os.listdir(directory):
+        if not filename.endswith('.json'):
+            continue
+        path = os.path.join(directory, filename)
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception as e:
+            logging.error(f"Failed to load form submission '{filename}': {e}")
+            continue
+
+        # Extract answers (non-empty values only)
+        answers: Dict[str, Any] = {}
+        if isinstance(data.get('formValues'), dict):
+            for k, v in data['formValues'].items():
+                if v not in (None, ""):
+                    answers[k] = v
+        else:
+            for field in data.get('fields', []):
+                val = field.get('value')
+                if val not in (None, ""):
+                    answers[field.get('label') or field.get('id')] = val
+
+        if not answers:
+            continue  # Ignore completely empty submissions
+
+        forms.append({
+            'id': data.get('id'),
+            'templateName': data.get('templateName'),
+            'submittedAt': data.get('submittedAt'),
+            'answers': answers
+        })
+
+    logging.info(f"Loaded {len(forms)} filled form submissions from '{directory}'.")
+    return forms
+
+
+# Cache loaded forms at startup so we don't hit the filesystem on every request
+FILLED_FORMS_DATA: List[Dict[str, Any]] = load_filled_forms(FILLED_FORMS_DIR)
+
+
+def get_forms_for_patient(patient_name: str, forms_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not patient_name:
+        return []
+    name_lower = patient_name.lower()
+    relevant = []
+    for form in forms_data:
+        try:
+            if any(name_lower in str(v).lower() for v in form['answers'].values()):
+                relevant.append(form)
+        except Exception:
+            # Defensive – skip malformed form entries
+            continue
+    return relevant
+
 # Initialize FastAPI app
 app = FastAPI(title="Quill RAG API", description="API for Quill RAG functionality")
 
@@ -362,7 +426,7 @@ def extract_components_from_native_pdf(file_path):
         #logging.info(f"Extracted {len(elements)} elements from PDF")
         #return elements, False
     #except Exception as e:
-    logging.error(f"Error extracting components from PDF natively: {e}")
+    #logging.error(f"Error extracting components from PDF natively: {e}")
     return extract_text_from_pdf_with_ocr(file_path), True
 
 def ingest_file(file_path, get_native_elements=False):
@@ -2491,6 +2555,102 @@ async def clinic_voice_ws(websocket: WebSocket):
             if "text" in msg and msg["text"]:
                 text_msg = msg["text"].strip()
                 
+                # ---------------- Handle manual typed queries ----------------
+                try:
+                    data_json = json.loads(text_msg)
+                except ValueError:
+                    data_json = None
+
+                if isinstance(data_json, dict) and data_json.get("type") == "text_query":
+                    transcript = str(data_json.get("transcript", "")).strip()
+                    if not transcript:
+                        await websocket.send_json({"type": "error", "content": "Empty query received"})
+                        continue
+
+                    # Add to conversation
+                    conversation.append({"type": "doctor", "content": transcript})
+
+                    # Process the doctor's query (reuse logic)
+                    try:
+                        import re
+                        patient_pattern = r"(?:patient|about|for|regarding)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)"
+                        match = re.search(patient_pattern, transcript, re.IGNORECASE)
+
+                        if match:
+                            current_patient = match.group(1).strip()
+                            logging.info(f"clinic_voice_ws (typed): Identified patient: {current_patient}")
+
+                        if not current_patient:
+                            reply_text = "I need to know which patient you're asking about. Please specify the patient's name."
+                        else:
+                            patient_data = patient_query.get_patient_summary(current_patient)
+
+                            patient_forms = get_forms_for_patient(current_patient, FILLED_FORMS_DATA)
+                            forms_summary = json.dumps(patient_forms, indent=2) if patient_forms else "No relevant form submissions found."
+
+                            if "error" in patient_data:
+                                reply_text = f"I couldn't find {current_patient} in our system. Please check the patient name and try again."
+                            else:
+                                prompt = f"""You are a knowledgeable medical assistant helping a doctor access patient information from the EHR system.
+
+PATIENT DATA:
+{json.dumps(patient_data, indent=2)}
+
+FORM SUBMISSIONS:
+{forms_summary}
+
+DOCTOR'S QUESTION: {transcript}
+
+INSTRUCTIONS:
+- Provide accurate, concise information based on the patient data and form submissions
+- If information is missing or blank, say \"No information available\" or \"Not recorded\"
+- Be conversational but professional
+- Focus on answering the specific question asked
+- Do not make up or assume any information not in the data
+- Format lists clearly (e.g., medications, conditions)
+- Include relevant dates when available
+
+RESPONSE:"""
+
+                                response = openai_client.chat.completions.create(
+                                    model=OPENAI_MODEL_NAME,
+                                    messages=[
+                                        {"role": "system", "content": "You are a helpful medical assistant retrieving patient information from an EHR system."},
+                                        {"role": "user", "content": prompt}
+                                    ],
+                                    temperature=0.1,
+                                    max_tokens=500
+                                )
+
+                                reply_text = response.choices[0].message.content.strip()
+
+                    except Exception as e:
+                        logging.error(f"clinic_voice_ws (typed): Error processing query: {e}")
+                        reply_text = "I encountered an error while processing your question. Please try again."
+
+                    # Add assistant response
+                    conversation.append({"type": "assistant", "content": reply_text})
+
+                    # TTS reply
+                    try:
+                        audio_reply = voice_helper.synthesize(reply_text)
+                    except Exception as e:
+                        logging.error("clinic_voice_ws (typed): TTS synthesis failed: %s", e)
+                        await websocket.send_json({"type": "error", "content": f"TTS failed: {e}"})
+                        continue
+
+                    # Send response (text then audio)
+                    await websocket.send_text(json.dumps({
+                        "type": "assistant_text",
+                        "content": reply_text,
+                        "current_patient": current_patient,
+                        "user_transcript": transcript
+                    }))
+                    await websocket.send_bytes(audio_reply)
+
+                    # Ready for next message
+                    continue
+
                 if text_msg.upper() != "END":
                     continue
                 
@@ -2542,6 +2702,14 @@ async def clinic_voice_ws(websocket: WebSocket):
                         # Get patient data
                         patient_data = patient_query.get_patient_summary(current_patient)
                         
+                        # ---------------- Include filled form submissions ----------------
+                        patient_forms = get_forms_for_patient(current_patient, FILLED_FORMS_DATA)
+                        if patient_forms:
+                            forms_summary = json.dumps(patient_forms, indent=2)
+                        else:
+                            forms_summary = "No relevant form submissions found."
+                        # ----------------------------------------------------------------
+                        
                         if "error" in patient_data:
                             reply_text = f"I couldn't find {current_patient} in our system. Please check the patient name and try again."
                         else:
@@ -2551,11 +2719,14 @@ async def clinic_voice_ws(websocket: WebSocket):
 PATIENT DATA:
 {json.dumps(patient_data, indent=2)}
 
+FORM SUBMISSIONS:
+{forms_summary}
+
 DOCTOR'S QUESTION: {transcript}
 
 INSTRUCTIONS:
-- Provide accurate, concise information based on the patient data
-- If information is missing or blank, say "No information available" or "Not recorded"
+- Provide accurate, concise information based on the patient data and form submissions
+- If information is missing or blank, say \"No information available\" or \"Not recorded\"
 - Be conversational but professional
 - Focus on answering the specific question asked
 - Do not make up or assume any information not in the data

@@ -65,7 +65,7 @@ export function Sidebar() {
         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-medical-primary text-white">
           <PlusSquare className="h-5 w-5" />
         </div>
-        <div className="font-semibold text-lg text-medical-text">MedMinute</div>
+        <div className="font-semibold text-lg text-medical-text">Flora</div>
       </div>
 
       <SidebarSection title="Form Management">

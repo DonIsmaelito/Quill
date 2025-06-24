@@ -4,78 +4,101 @@ import path from "path";
 import fs from "fs";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 // Custom plugin to handle file system operations in development
 const fileSystemPlugin = () => {
   return {
     name: "file-system-plugin",
     configureServer(server: any) {
-      server.middlewares.use("/api/update-template", async (req: any, res: any) => {
-        if (req.method === "POST") {
-          let body = "";
-          req.on("data", (chunk: any) => {
-            body += chunk.toString();
-          });
-          req.on("end", async () => {
-            try {
-              const { templateId, data } = JSON.parse(body);
-              const filePath = path.join(__dirname, "temp", "form-templates", `${templateId}.json`);
-              
-              // Ensure directory exists
-              const dir = path.dirname(filePath);
-              if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
+      server.middlewares.use(
+        "/api/update-template",
+        async (req: any, res: any) => {
+          if (req.method === "POST") {
+            let body = "";
+            req.on("data", (chunk: any) => {
+              body += chunk.toString();
+            });
+            req.on("end", async () => {
+              try {
+                const { templateId, data } = JSON.parse(body);
+                const filePath = path.join(
+                  __dirname,
+                  "temp",
+                  "form-templates",
+                  `${templateId}.json`
+                );
+
+                // Ensure directory exists
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) {
+                  fs.mkdirSync(dir, { recursive: true });
+                }
+
+                // Write the file
+                fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(
+                  JSON.stringify({
+                    success: true,
+                    message: "Template updated successfully",
+                  })
+                );
+              } catch (error) {
+                console.error("Error updating template:", error);
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(
+                  JSON.stringify({
+                    success: false,
+                    error: (error as Error).message,
+                  })
+                );
               }
-              
-              // Write the file
-              fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-              
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ success: true, message: "Template updated successfully" }));
-            } catch (error) {
-              console.error("Error updating template:", error);
-              res.writeHead(500, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ success: false, error: (error as Error).message }));
-            }
-          });
-        } else {
-          res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+            });
+          } else {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({ success: false, error: "Method not allowed" })
+            );
+          }
         }
-      });
+      );
 
       // Email service endpoint
-      server.middlewares.use("/api/send-form-email", async (req: any, res: any) => {
-        if (req.method === "POST") {
-          let body = "";
-          req.on("data", (chunk: any) => {
-            body += chunk.toString();
-          });
-          req.on("end", async () => {
-            try {
-              const { patientEmail, patientName, templateName, templateId } = JSON.parse(body);
-              
-              // Create form URL with template ID parameter
-              const formUrl = `http://localhost:5173/?template=${templateId}`;
-              
-              // Create email transporter using Gmail SMTP
-              const transporter = nodemailer.createTransport({
-                host: 'smtp.gmail.com',
-                port: 587,
-                secure: false,
-                auth: {
-                  user: process.env.EMAIL_USER,
-                  pass: process.env.EMAIL_PASS
-                }
-              });
+      server.middlewares.use(
+        "/api/send-form-email",
+        async (req: any, res: any) => {
+          if (req.method === "POST") {
+            let body = "";
+            req.on("data", (chunk: any) => {
+              body += chunk.toString();
+            });
+            req.on("end", async () => {
+              try {
+                const { patientEmail, patientName, templateName, templateId } =
+                  JSON.parse(body);
 
-              // Email content
-              const mailOptions = {
-                from: process.env.EMAIL_FROM,
-                to: process.env.EMAIL_TO,
-                subject: `Form Request: ${templateName}`,
-                html: `
+                // Create form URL with template ID parameter
+                const formUrl = `http://localhost:5173/?template=${templateId}`;
+
+                // Create email transporter using Gmail SMTP
+                const transporter = nodemailer.createTransport({
+                  host: "smtp.gmail.com",
+                  port: 587,
+                  secure: false,
+                  auth: {
+                    user: process.env.EMAIL_USER || "",
+                    pass: process.env.EMAIL_PASS || "",
+                  },
+                });
+
+                // Email content
+                const mailOptions = {
+                  from: process.env.EMAIL_FROM,
+                  to: process.env.EMAIL_TO,
+                  subject: `Form Request: ${templateName}`,
+                  html: `
                   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2 style="color: #2563eb;">Medical Form Request</h2>
                     <p>Dear ${patientName},</p>
@@ -95,33 +118,42 @@ const fileSystemPlugin = () => {
                       Please do not reply to this email.
                     </p>
                   </div>
-                `
-              };
+                `,
+                };
 
-              // Send email
-              await transporter.sendMail(mailOptions);
-              
-              console.log(`Email sent successfully to ${patientEmail} for template: ${templateName}`);
-              
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ 
-                success: true, 
-                message: "Form request email sent successfully" 
-              }));
-            } catch (error) {
-              console.error("Error sending email:", error);
-              res.writeHead(500, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ 
-                success: false, 
-                error: (error as Error).message 
-              }));
-            }
-          });
-        } else {
-          res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+                // Send email
+                await transporter.sendMail(mailOptions);
+
+                console.log(
+                  `Email sent successfully to ${patientEmail} for template: ${templateName}`
+                );
+
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(
+                  JSON.stringify({
+                    success: true,
+                    message: "Form request email sent successfully",
+                  })
+                );
+              } catch (error) {
+                console.error("Error sending email:", error);
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(
+                  JSON.stringify({
+                    success: false,
+                    error: (error as Error).message,
+                  })
+                );
+              }
+            });
+          } else {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({ success: false, error: "Method not allowed" })
+            );
+          }
         }
-      });
+      );
 
       // Assignment service endpoint
       server.middlewares.use("/api/assign", async (req: any, res: any) => {
@@ -133,40 +165,50 @@ const fileSystemPlugin = () => {
           req.on("end", async () => {
             try {
               const assignment = JSON.parse(body);
-              
+
               // Create a unique filename for the assignment
               const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
               const filename = `assignment-${assignment.templateId}-${assignment.patientId}-${timestamp}.json`;
-              
+
               // Save the assignment to a file
-              const assignmentsDir = path.join(__dirname, "temp", "assignments");
+              const assignmentsDir = path.join(
+                __dirname,
+                "temp",
+                "assignments"
+              );
               if (!fs.existsSync(assignmentsDir)) {
                 fs.mkdirSync(assignmentsDir, { recursive: true });
               }
-              
+
               const filePath = path.join(assignmentsDir, filename);
               fs.writeFileSync(filePath, JSON.stringify(assignment, null, 2));
-              
+
               console.log(`Assignment saved: ${filename}`);
-              
+
               res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ 
-                success: true, 
-                message: "Assignment saved successfully",
-                filename: filename
-              }));
+              res.end(
+                JSON.stringify({
+                  success: true,
+                  message: "Assignment saved successfully",
+                  filename: filename,
+                })
+              );
             } catch (error) {
               console.error("Error saving assignment:", error);
               res.writeHead(500, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ 
-                success: false, 
-                error: (error as Error).message 
-              }));
+              res.end(
+                JSON.stringify({
+                  success: false,
+                  error: (error as Error).message,
+                })
+              );
             }
           });
         } else {
           res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+          res.end(
+            JSON.stringify({ success: false, error: "Method not allowed" })
+          );
         }
       });
 
@@ -174,30 +216,39 @@ const fileSystemPlugin = () => {
       server.middlewares.use("/api/filled-form", async (req: any, res: any) => {
         if (req.method !== "GET") {
           res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+          res.end(
+            JSON.stringify({ success: false, error: "Method not allowed" })
+          );
           return;
         }
 
         try {
-          const formId = req.url?.split('/')[1]; // Get form ID from URL
+          const formId = req.url?.split("/")[1]; // Get form ID from URL
           if (!formId) {
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Form ID is required" }));
             return;
           }
-          
+
           // Path to the filled form file in frontend2 project
-          const filledFormPath = path.join(__dirname, "..", "frontend2", "temp", "filled-forms", `${formId}.json`);
-          
+          const filledFormPath = path.join(
+            __dirname,
+            "..",
+            "frontend2",
+            "temp",
+            "filled-forms",
+            `${formId}.json`
+          );
+
           if (!fs.existsSync(filledFormPath)) {
             res.writeHead(404, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Form not found" }));
             return;
           }
-          
+
           const formData = await fs.promises.readFile(filledFormPath, "utf-8");
           const form = JSON.parse(formData);
-          
+
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(form));
         } catch (error) {
@@ -208,53 +259,74 @@ const fileSystemPlugin = () => {
       });
 
       // Save template API endpoint
-      server.middlewares.use("/api/save-template", async (req: any, res: any) => {
-        if (req.method !== "POST") {
-          res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
-          return;
-        }
-
-        let body = "";
-        req.on("data", (chunk: any) => {
-          body += chunk.toString();
-        });
-        req.on("end", async () => {
-          try {
-            const { templateId, data } = JSON.parse(body);
-            
-            // Ensure form-templates directory exists
-            const formTemplatesDir = path.join(__dirname, "temp", "form-templates");
-            await fs.promises.mkdir(formTemplatesDir, { recursive: true });
-            
-            // Save the template
-            const filePath = path.join(formTemplatesDir, `${templateId}.json`);
-            await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2));
-            
-            console.log(`Template saved: ${templateId}`);
-            
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ 
-              success: true, 
-              message: "Template saved successfully",
-              templateId: templateId
-            }));
-          } catch (error) {
-            console.error("Error saving template:", error);
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ 
-              success: false, 
-              error: (error as Error).message 
-            }));
+      server.middlewares.use(
+        "/api/save-template",
+        async (req: any, res: any) => {
+          if (req.method !== "POST") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({ success: false, error: "Method not allowed" })
+            );
+            return;
           }
-        });
-      });
+
+          let body = "";
+          req.on("data", (chunk: any) => {
+            body += chunk.toString();
+          });
+          req.on("end", async () => {
+            try {
+              const { templateId, data } = JSON.parse(body);
+
+              // Ensure form-templates directory exists
+              const formTemplatesDir = path.join(
+                __dirname,
+                "temp",
+                "form-templates"
+              );
+              await fs.promises.mkdir(formTemplatesDir, { recursive: true });
+
+              // Save the template
+              const filePath = path.join(
+                formTemplatesDir,
+                `${templateId}.json`
+              );
+              await fs.promises.writeFile(
+                filePath,
+                JSON.stringify(data, null, 2)
+              );
+
+              console.log(`Template saved: ${templateId}`);
+
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  success: true,
+                  message: "Template saved successfully",
+                  templateId: templateId,
+                })
+              );
+            } catch (error) {
+              console.error("Error saving template:", error);
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  success: false,
+                  error: (error as Error).message,
+                })
+              );
+            }
+          });
+        }
+      );
 
       // Save uploaded PDF file API endpoint
       server.middlewares.use("/api/save-pdf", async (req: any, res: any) => {
         if (req.method !== "POST") {
           res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+          res.end(
+            JSON.stringify({ success: false, error: "Method not allowed" })
+          );
           return;
         }
 
@@ -265,31 +337,35 @@ const fileSystemPlugin = () => {
         req.on("end", async () => {
           try {
             const { templateId, pdfData, fileName } = JSON.parse(body);
-            
+
             // Ensure pdfs directory exists
             const pdfsDir = path.join(__dirname, "temp", "pdfs");
             await fs.promises.mkdir(pdfsDir, { recursive: true });
-            
+
             // Convert base64 to buffer and save PDF
-            const pdfBuffer = Buffer.from(pdfData, 'base64');
+            const pdfBuffer = Buffer.from(pdfData, "base64");
             const pdfPath = path.join(pdfsDir, `${templateId}.pdf`);
             await fs.promises.writeFile(pdfPath, pdfBuffer);
-            
+
             console.log(`PDF saved: ${templateId}.pdf`);
-            
+
             res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ 
-              success: true, 
-              message: "PDF saved successfully",
-              pdfUrl: `/api/pdf/${templateId}`
-            }));
+            res.end(
+              JSON.stringify({
+                success: true,
+                message: "PDF saved successfully",
+                pdfUrl: `/api/pdf/${templateId}`,
+              })
+            );
           } catch (error) {
             console.error("Error saving PDF:", error);
             res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ 
-              success: false, 
-              error: (error as Error).message 
-            }));
+            res.end(
+              JSON.stringify({
+                success: false,
+                error: (error as Error).message,
+              })
+            );
           }
         });
       });
@@ -298,32 +374,39 @@ const fileSystemPlugin = () => {
       server.middlewares.use("/api/pdf", async (req: any, res: any) => {
         if (req.method !== "GET") {
           res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Method not allowed" }));
+          res.end(
+            JSON.stringify({ success: false, error: "Method not allowed" })
+          );
           return;
         }
 
         try {
-          const templateId = req.url?.split('/')[1]; // Get template ID from URL
+          const templateId = req.url?.split("/")[1]; // Get template ID from URL
           if (!templateId) {
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Template ID is required" }));
             return;
           }
-          
+
           // Path to the PDF file
-          const pdfPath = path.join(__dirname, "temp", "pdfs", `${templateId}.pdf`);
-          
+          const pdfPath = path.join(
+            __dirname,
+            "temp",
+            "pdfs",
+            `${templateId}.pdf`
+          );
+
           if (!fs.existsSync(pdfPath)) {
             res.writeHead(404, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "PDF not found" }));
             return;
           }
-          
+
           // Serve the PDF file
           const pdfBuffer = await fs.promises.readFile(pdfPath);
-          res.writeHead(200, { 
+          res.writeHead(200, {
             "Content-Type": "application/pdf",
-            "Content-Length": pdfBuffer.length
+            "Content-Length": pdfBuffer.length,
           });
           res.end(pdfBuffer);
         } catch (error) {
@@ -332,7 +415,7 @@ const fileSystemPlugin = () => {
           res.end(JSON.stringify({ error: "Internal server error" }));
         }
       });
-    }
+    },
   };
 };
 

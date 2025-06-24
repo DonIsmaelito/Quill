@@ -121,8 +121,9 @@ export function AssistantPanel({
     ragService.setWelcomeMessage(welcomeMessage);
     // Reset formValuesRef to match the new fields
     formValuesRef.current = {};
-    formFields.forEach(field => {
-      formValuesRef.current[field.id] = formValues[field.id] || field.value || "";
+    formFields.forEach((field) => {
+      formValuesRef.current[field.id] =
+        formValues[field.id] || field.value || "";
     });
   }, [formFields, formTitle]);
 
@@ -135,11 +136,11 @@ export function AssistantPanel({
         label: field.label,
         value: formValuesRef.current[field.id] || "MISSING",
       }));
-      
+
       // Send updated form fields to WebSocket if connected
       sendFormFieldsToWebSocket();
-      
-      console.log('AssistantPanel: Form fields updated:', currentFormFields);
+
+      console.log("AssistantPanel: Form fields updated:", currentFormFields);
     }
   }, [formFields]);
 
@@ -410,36 +411,7 @@ export function AssistantPanel({
 
       // Update form fields if any were changed
       if (updatedFields.length > 0) {
-        // Filter out non-changes first to avoid unnecessary updates
-        const actualUpdates = updatedFields.filter((update) => {
-          const field = formFields.find(
-            (f) => f.id.toLowerCase() === update.id.toLowerCase()
-          );
-          // Had MISSING in non filled fields here
-          // Only include if field exists, value is different from current, AND value is not "MISSING"
-          return (
-            field &&
-            formValuesRef.current[field.id] !== update.value &&
-            update.value !== "MISSING" &&
-            update.value !== "missing" &&
-            update.value?.toString().toUpperCase() !== "MISSING"
-          );
-        });
-
-        if (actualUpdates.length > 0) {
-          console.log("Actual field updates:", actualUpdates);
-
-          // Convert to the format expected by parent component
-          const fieldUpdates = actualUpdates.map((update) => ({
-            id: update.id,
-            value: update.value,
-          }));
-
-          // Notify parent about changes
-          onFieldsUpdated?.(fieldUpdates);
-        } else {
-          console.log("No actual field updates found (values already match)");
-        }
+        onFieldsUpdated?.(updatedFields);
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -555,35 +527,7 @@ export function AssistantPanel({
 
       // Update form fields if any were changed
       if (updatedFields.length > 0) {
-        // Filter out non-changes first to avoid unnecessary updates
-        const actualUpdates = updatedFields.filter((update) => {
-          const field = formFields.find(
-            (f) => f.id.toLowerCase() === update.id.toLowerCase()
-          );
-          // Only include if field exists, value is different from current, AND value is not "MISSING"
-          return (
-            field &&
-            formValuesRef.current[field.id] !== update.value &&
-            update.value !== "MISSING" &&
-            update.value !== "missing" &&
-            update.value?.toString().toUpperCase() !== "MISSING"
-          );
-        });
-
-        if (actualUpdates.length > 0) {
-          console.log("Actual field updates:", actualUpdates);
-
-          // Convert to the format expected by parent component
-          const fieldUpdates = actualUpdates.map((update) => ({
-            id: update.id,
-            value: update.value,
-          }));
-
-          // Notify parent about changes
-          onFieldsUpdated?.(fieldUpdates);
-        } else {
-          console.log("No actual field updates found (values already match)");
-        }
+        onFieldsUpdated?.(updatedFields);
       }
       // ~~~~
 
@@ -697,34 +641,69 @@ export function AssistantPanel({
   };
 
   const getWs = () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)
+    if (wsRef.current && wsRef.current.readyState < 2) {
       return wsRef.current;
+    }
 
     console.log("Creating new WebSocket connection...");
-    wsRef.current = new WebSocket("ws://localhost:8000/voice_ws");
+    const ws = new WebSocket("ws://localhost:8000/voice_ws");
+    let audioQueue: Blob[] = [];
+    let isPlaying = false;
 
-    wsRef.current.onopen = () => {
-      console.log("Voice WebSocket connected");
-      // Send language preference to voice agent
-      if (selectedLanguage) {
-        wsRef.current?.send(`LANGUAGE:${selectedLanguage}`);
-        console.log(`Sent language preference: ${selectedLanguage}`);
+    const playNextAudio = () => {
+      if (audioQueue.length === 0) {
+        isPlaying = false;
+        if (shouldAutoListen.current) {
+          startRecording();
+        } else {
+          setConversationState("idle");
+        }
+        return;
       }
-      // Send current form fields when connection opens
+
+      isPlaying = true;
+      const audioBlob = audioQueue.shift();
+      if (audioBlob) {
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          playNextAudio();
+        };
+        audio.onerror = (err) => {
+          console.error("Error playing audio:", err);
+          playNextAudio();
+        };
+        audio.play().catch((err) => {
+          console.error("Audio playback failed:", err);
+          playNextAudio();
+        });
+      }
+    };
+
+    ws.onopen = () => {
+      console.log("Voice WebSocket connected");
+      wsRef.current = ws;
+      if (selectedLanguage) {
+        ws.send(`LANGUAGE:${selectedLanguage}`);
+      }
       sendFormFieldsToWebSocket();
     };
 
-    wsRef.current.onmessage = (ev) => {
-      console.log("WebSocket message received:", typeof ev.data);
-      if (typeof ev.data === "string") {
-        const msg = JSON.parse(ev.data);
-        console.log("JSON message:", msg);
-        if (msg.type === "assistant_text") {
+    ws.onmessage = (event) => {
+      if (event.data instanceof Blob) {
+        audioQueue.push(event.data);
+        if (!isPlaying) {
           setConversationState("speaking");
+          playNextAudio();
+        }
+        return;
+      }
 
-          let responseContent = msg.content;
-
-          // Extract field updates from the response (same logic as regular chat)
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "assistant_text") {
+          let responseContent = data.content;
           const fieldUpdatesMatch = responseContent.match(
             /\{['"]field_updates['"]:\s*\[[\s\S]*?\]\}/
           );
@@ -738,287 +717,49 @@ export function AssistantPanel({
               );
               const updatesObj = JSON.parse(fieldUpdatesString);
               updatedFields = updatesObj.field_updates || [];
-              console.log("Voice: Field updates extracted:", updatedFields);
-
-              // Remove the field updates from the response text
               responseContent = responseContent
                 .replace(fieldUpdatesMatch[0], "")
                 .trim();
-              console.log("Voice: Cleaned response text:", responseContent);
             } catch (error) {
-              console.error("Voice: Error parsing field updates:", error);
+              console.error("Error parsing voice field updates:", error);
             }
           }
 
-          // Add a message about updated fields if any were updated
-          if (updatedFields.length > 0) {
-            const fieldLabels = updatedFields.map(
-              (update) =>
-                formFields.find((f) => f.id === update.id)?.label || update.id
-            );
-            responseContent += `\n\nI've updated the following fields: ${fieldLabels.join(
-              ", "
-            )}.`;
-            console.log(
-              "Voice: Enhanced response with field update info:",
-              responseContent
-            );
-          }
-
-          // Extract mentioned fields from the response
-          const mentionedFields = formFields
-            .filter((field) =>
-              responseContent.toLowerCase().includes(field.label.toLowerCase())
-            )
-            .map((field) => field.id);
-
-          // Notify parent component about mentioned fields
-          onFieldsMentioned?.(mentionedFields);
-
-          // Add assistant response to chat
           const assistantMessage: Message = {
-            id: (Date.now() + Math.random()).toString(),
+            id: (Date.now() + 1).toString(),
             content: responseContent,
             type: "assistant",
             timestamp: new Date(),
           };
           setMessages((prev) => [...prev, assistantMessage]);
-          console.log("Assistant response added to chat");
 
-          // Update form fields if any were changed
           if (updatedFields.length > 0) {
-            // Filter out non-changes first to avoid unnecessary updates
-            const actualUpdates = updatedFields.filter((update) => {
-              const field = formFields.find(
-                (f) => f.id.toLowerCase() === update.id.toLowerCase()
-              );
-              // Only include if field exists, value is different from current, AND value is not "MISSING"
-              return (
-                field &&
-                formValuesRef.current[field.id] !== update.value &&
-                update.value !== "MISSING" &&
-                update.value !== "missing" &&
-                update.value?.toString().toUpperCase() !== "MISSING"
-              );
-            });
-
-            if (actualUpdates.length > 0) {
-              console.log("Voice: Actual field updates:", actualUpdates);
-
-              // Convert to the format expected by parent component
-              const fieldUpdates = actualUpdates.map((update) => ({
-                id: update.id,
-                value: update.value,
-              }));
-
-              // Notify parent about changes
-              onFieldsUpdated?.(fieldUpdates);
-              console.log("Voice: Form fields updated successfully");
-            } else {
-              console.log(
-                "Voice: No actual field updates found (values already match)"
-              );
-            }
+            onFieldsUpdated?.(updatedFields);
           }
-        } else if (msg.type === "error") {
-          console.error("Server error:", msg.content);
+        } else if (data.type === "error") {
+          console.error("Server error:", data.content);
+          alert("Voice processing error: " + data.content);
           setConversationState("idle");
-          alert("Voice processing error: " + msg.content);
         }
-      } else if (ev.data instanceof Blob) {
-        console.log(
-          "Audio blob received:",
-          ev.data.size,
-          "bytes",
-          "type:",
-          ev.data.type
-        );
-        const audioBlob = URL.createObjectURL(ev.data);
-        const audio = new Audio(audioBlob);
-
-        // Enhanced debugging for audio playback
-        console.log("🔊 Creating Audio element for Blob");
-        console.log("🔊 Audio can play MP3:", audio.canPlayType("audio/mpeg"));
-        console.log("🔊 Audio can play MP4:", audio.canPlayType("audio/mp4"));
-        console.log("🔊 Audio volume:", audio.volume);
-        console.log("🔊 Audio muted:", audio.muted);
-
-        // Set volume to maximum and ensure not muted
-        audio.volume = 1.0;
-        audio.muted = false;
-
-        // Add better error handling and debugging
-        audio.onerror = (e) => {
-          console.error("🔊 Audio error event:", e);
-          console.error("🔊 Audio error details:", audio.error);
-          console.error("🔊 Audio error code:", audio.error?.code);
-          console.error("🔊 Audio error message:", audio.error?.message);
-        };
-
-        audio.onloadstart = () => console.log("🔊 Audio load started");
-        audio.onloadeddata = () => console.log("🔊 Audio data loaded");
-        audio.oncanplay = () => console.log("🔊 Audio can play");
-        audio.oncanplaythrough = () => console.log("🔊 Audio can play through");
-
-        // When audio finishes playing, automatically start listening again if in conversation mode
-        audio.onended = () => {
-          console.log("🔊 Audio playback finished");
-          URL.revokeObjectURL(audioBlob); // Clean up object URL
-          if (isConversationActive && shouldAutoListen.current) {
-            console.log("Auto-starting next recording...");
-            setTimeout(() => {
-              startRecording();
-            }, 500); // Small delay before next recording
-          } else {
-            setConversationState("idle");
-          }
-        };
-
-        console.log("🔊 Starting audio playback...");
-        audio
-          .play()
-          .then(() => {
-            console.log("🔊 Audio playback started successfully");
-            console.log("🔊 Audio current time:", audio.currentTime);
-            console.log("🔊 Audio duration:", audio.duration);
-            console.log("🔊 Audio paused:", audio.paused);
-          })
-          .catch((err) => {
-            console.error("🔊 Audio playback error:", err);
-            console.error("🔊 Error name:", err.name);
-            console.error("🔊 Error message:", err.message);
-            console.error("🔊 Audio source:", audioBlob);
-            console.error("🔊 Audio readyState:", audio.readyState);
-            console.error("🔊 Audio networkState:", audio.networkState);
-            console.error("🔊 Audio buffered ranges:", audio.buffered.length);
-
-            // Try to provide helpful error messages
-            if (err.name === "NotAllowedError") {
-              console.error(
-                "🔊 Browser blocked audio playback - user interaction may be required"
-              );
-              alert(
-                "Audio playback was blocked by the browser. Please click somewhere on the page to enable audio."
-              );
-            } else if (err.name === "NotSupportedError") {
-              console.error("🔊 Audio format not supported by browser");
-              alert(
-                "Your browser doesn't support the audio format. Please try a different browser."
-              );
-            }
-
-            // If audio fails, still continue conversation
-            if (isConversationActive && shouldAutoListen.current) {
-              setTimeout(() => {
-                startRecording();
-              }, 500);
-            } else {
-              setConversationState("idle");
-            }
-          });
-      } else if (ev.data instanceof ArrayBuffer) {
-        console.log("Audio ArrayBuffer received:", ev.data.byteLength, "bytes");
-        const audioBuffer = new Blob([ev.data], { type: "audio/mpeg" });
-        const audioUrl = URL.createObjectURL(audioBuffer);
-        const audio = new Audio(audioUrl);
-
-        // Enhanced debugging for audio playback
-        console.log("🔊 Creating Audio element for ArrayBuffer");
-        console.log("🔊 Audio can play MP3:", audio.canPlayType("audio/mpeg"));
-        console.log("🔊 Audio can play MP4:", audio.canPlayType("audio/mp4"));
-        console.log("🔊 Audio volume:", audio.volume);
-        console.log("🔊 Audio muted:", audio.muted);
-
-        // Set volume to maximum and ensure not muted
-        audio.volume = 1.0;
-        audio.muted = false;
-
-        // Add better error handling and debugging
-        audio.onerror = (e) => {
-          console.error("🔊 Audio error event:", e);
-          console.error("🔊 Audio error details:", audio.error);
-          console.error("🔊 Audio error code:", audio.error?.code);
-          console.error("🔊 Audio error message:", audio.error?.message);
-        };
-
-        audio.onloadstart = () => console.log("🔊 Audio load started");
-        audio.onloadeddata = () => console.log("🔊 Audio data loaded");
-        audio.oncanplay = () => console.log("🔊 Audio can play");
-        audio.oncanplaythrough = () => console.log("🔊 Audio can play through");
-
-        // When audio finishes playing, automatically start listening again if in conversation mode
-        audio.onended = () => {
-          console.log("🔊 Audio playback finished");
-          URL.revokeObjectURL(audioUrl); // Clean up object URL
-          if (isConversationActive && shouldAutoListen.current) {
-            console.log("Auto-starting next recording...");
-            setTimeout(() => {
-              startRecording();
-            }, 500); // Small delay before next recording
-          } else {
-            setConversationState("idle");
-          }
-        };
-
-        console.log("🔊 Starting audio playback...");
-        audio
-          .play()
-          .then(() => {
-            console.log("🔊 Audio playback started successfully");
-            console.log("🔊 Audio current time:", audio.currentTime);
-            console.log("🔊 Audio duration:", audio.duration);
-            console.log("🔊 Audio paused:", audio.paused);
-          })
-          .catch((err) => {
-            console.error("🔊 Audio playback error:", err);
-            console.error("🔊 Error name:", err.name);
-            console.error("🔊 Error message:", err.message);
-            console.error("🔊 Audio source:", audioUrl);
-            console.error("🔊 Audio readyState:", audio.readyState);
-            console.error("🔊 Audio networkState:", audio.networkState);
-            console.error("🔊 Audio buffered ranges:", audio.buffered.length);
-
-            // Try to provide helpful error messages
-            if (err.name === "NotAllowedError") {
-              console.error(
-                "🔊 Browser blocked audio playback - user interaction may be required"
-              );
-              alert(
-                "Audio playback was blocked by the browser. Please click somewhere on the page to enable audio."
-              );
-            } else if (err.name === "NotSupportedError") {
-              console.error("🔊 Audio format not supported by browser");
-              alert(
-                "Your browser doesn't support the audio format. Please try a different browser."
-              );
-            }
-
-            // If audio fails, still continue conversation
-            if (isConversationActive && shouldAutoListen.current) {
-              setTimeout(() => {
-                startRecording();
-              }, 500);
-            } else {
-              setConversationState("idle");
-            }
-          });
+      } catch (error) {
+        console.error("Error parsing message:", error);
       }
     };
 
-    wsRef.current.onerror = (error) => {
+    ws.onerror = (error) => {
       console.error("Voice WebSocket error:", error);
       setConversationState("idle");
     };
 
-    wsRef.current.onclose = () => {
+    ws.onclose = () => {
       console.log("Voice WebSocket disconnected");
+      wsRef.current = null;
       setConversationState("idle");
     };
 
-    return wsRef.current;
+    return ws;
   };
 
-  // Function to send current form fields to WebSocket
   const sendFormFieldsToWebSocket = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN && formFields.length > 0) {
       const currentFormFields = formFields.map((field) => ({
