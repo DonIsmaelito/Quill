@@ -1681,7 +1681,7 @@ async def query_endpoint(
             # Answer without document
             explanation_only = is_field_explanation_request_py(message)
             allow_updates = (
-                is_update_request_py(message)
+                is_update_request_py(message, chat_history_formatted, formFields)
                 or is_auto_fill_request_py(message)
             ) and not explanation_only
 
@@ -1945,68 +1945,79 @@ except Exception:
         sys.path.append(str(voice_module_path))
     voice_helper = importlib.import_module("voice")
 
-def is_update_request_py(message: str) -> bool:
-    lower_message = message.lower()
-    update_keywords = [
-        "update",
-        "change",
-        "modify",
-        "correct",
-        "fix",
-        "edit",
-        "wrong",
-        "incorrect",
-        "mistake",
-        "error",
-        "not right",
-        "is not",
-        "instead of",
-        "should be",
-        "actually",
-        "instead",
-        "my real",
-        "my actual",
-        "my correct",
-        "add",
-        "remove",
-    ]
+def is_update_request_py(message: str, chat_history: str = "", form_fields: str = "") -> bool:
+    """
+    Use a small, fast OpenAI model to determine if the user wants to update the form.
+    
+    Args:
+        message: The current user message
+        chat_history: Previous conversation context
+        form_fields: Current form fields and values
+    
+    Returns:
+        bool: True if the user wants to update the form, False otherwise
+    """
+    try:
+        # Use a very small, fast model for this classification task
+        # gpt-4.1-nano is the smallest and fastest GPT-4 model
+        fast_model = "gpt-4.1-nano"
+        
+        # Build context for the model
+        context_parts = []
+        
+        if chat_history:
+            context_parts.append(f"CONVERSATION HISTORY:\n{chat_history}")
+        
+        if form_fields:
+            context_parts.append(f"CURRENT FORM FIELDS:\n{form_fields}")
+        
+        context = "\n\n".join(context_parts) if context_parts else "No previous context available."
+        
+        prompt = f"""You are a medical form assistant. Determine if the user wants the assistant to MODIFY the form in any way.
 
-    info_types = [
-        "name",
-        "address",
-        "phone",
-        "email",
-        "number",
-        "info",
-        "information",
-        "birth",
-        "date",
-        "ssn",
-        "social",
-        "id",
-        "identifier",
-        "password",
-        "contact",
-        "details",
-        "data",
-        "profile",
-        "record",
-    ]
+CONTEXT:
+{context}
 
-    for kw in update_keywords:
-        if f" {kw} " in lower_message:
-            for info in info_types:
-                if info in lower_message:
-                    return True
-            if kw in {"update", "change", "modify", "fix", "correct"}:
-                return True
+CURRENT USER MESSAGE: "{message}"
 
-    if "not" in lower_message and "but" in lower_message:
-        return True
-    if any(phrase in lower_message for phrase in ["it's", "its", "should be", "is actually"]):
-        return True
+TASK: Determine if the user wants the assistant to modify the form (add, change, fill, or update any information).
 
-    return False
+MODIFY indicators include:
+- Correcting wrong information: "that's not right", "it should be", "actually it's"
+- Changing existing values: "change my address", "update my phone number"
+- Fixing mistakes: "that's incorrect", "wrong", "mistake"
+- Adding missing info: "add my middle name", "include my allergies"
+- Providing new information: "my name is John", "I live at 123 Main St"
+- Auto-fill requests: "fill out the form", "complete the form"
+- Any request to add, change, or update form data
+
+NON-MODIFY indicators:
+- Asking about fields: "what does this mean?", "how do I fill this?"
+- Seeking explanations: "explain this field", "what should I put here?"
+- General conversation: greetings, thanks, etc.
+
+RESPONSE: Answer with ONLY "YES" (if form should be modified) or "NO" (if no modification needed) - no other text."""
+
+        response = openai_client.chat.completions.create(
+            model=fast_model,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=5,  # Very short response
+        )
+        
+        result = response.choices[0].message.content.strip().upper()
+        
+        # Return True for YES, False for NO
+        return result == "YES"
+        
+    except Exception as e:
+        logging.error(f"Error in AI-based update detection: {e}")
+        # Fallback to simple keyword matching if AI fails
+        lower_message = message.lower()
+        update_keywords = ["update", "change", "modify", "correct", "fix", "edit", "wrong", "incorrect", "mistake", "error", "not right", "should be", "actually", "instead"]
+        return any(keyword in lower_message for keyword in update_keywords)
 
 def is_field_explanation_request_py(message: str) -> bool:
     lower = message.lower().strip()
@@ -2284,7 +2295,7 @@ async def voice_ws(websocket: WebSocket):
                 else:
                     # Regular query processing (existing logic)
                     # Determine intent & call existing endpoints directly (function)
-                    is_update = is_update_request_py(transcript)
+                    is_update = is_update_request_py(transcript, "\n".join([f"{m['type']}: {m['content']}" for m in conversation]), current_form_fields)
                     explanation_only = is_field_explanation_request_py(transcript)
                     allow_updates = (
                         is_update

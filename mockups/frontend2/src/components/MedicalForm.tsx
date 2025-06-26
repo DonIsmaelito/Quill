@@ -533,11 +533,8 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   useEffect(() => {
     if (templateId) {
       setTemplateFormValues((prev) => ({ ...prev, ...propFormValues }));
-    } else if (propOnChange) {
-      // For non-template forms, push the updated values up to the parent
-      propOnChange({ ...propFormValues });
     }
-  }, [propFormValues, templateId, propOnChange]);
+  }, [propFormValues, templateId]);
 
   const loadTemplate = async (id: string) => {
     setIsLoadingTemplate(true);

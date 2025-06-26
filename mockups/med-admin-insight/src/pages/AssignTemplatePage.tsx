@@ -12,6 +12,7 @@ export default function AssignTemplatePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredPatients, setFilteredPatients] =
     useState<Patient[]>(patientsData);
+  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{
     show: boolean;
     message: string;
@@ -117,90 +118,183 @@ export default function AssignTemplatePage() {
                           {patient.name}
                         </p>
                         <p className="text-sm text-medical-subtext">
-                          ID: {patient.id} - DOB: {patient.dob}
+                          DOB: {patient.dob}
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        if (!templateId) return;
-                        
-                        // For demo purposes, use the specified email
-                        const patientEmail = "fernandesi2244@gmail.com";
-                        const formUrl = "http://localhost:5173/";
-                        
-                        // Get template name (you might want to load this from your templates data)
-                        const templateName = templateId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        
-                        try {
-                          // Send form request email
-                          const emailRes = await fetch("/api/send-form-email", {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify({
-                              patientEmail,
-                              patientName: patient.name,
-                              templateName,
-                              templateId
-                            }),
-                          });
+                    {sentRequests.has(patient.id) ? (
+                      <div className="group relative inline-flex items-center justify-center h-9 px-3 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-[189px]">
+                        <div className="flex items-center gap-1 text-green-600 group-hover:opacity-0 transition-opacity duration-200">
+                          <CheckCircle className="h-4 w-4" />
+                          <span className="text-sm font-medium">Sent</span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-full"
+                          onClick={async () => {
+                            if (!templateId) return;
+                            
+                            // For demo purposes, use the specified email
+                            const patientEmail = "fernandesi2244@gmail.com";
+                            const formUrl = "http://localhost:5173/";
+                            
+                            // Get template name (you might want to load this from your templates data)
+                            const templateName = templateId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            
+                            try {
+                              // Send form request email
+                              const emailRes = await fetch("/api/send-form-email", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({
+                                  patientEmail,
+                                  patientName: patient.name,
+                                  templateName,
+                                  templateId
+                                }),
+                              });
 
-                          if (!emailRes.ok) {
-                            const err = await emailRes.json();
-                            throw new Error(err?.error || "Failed to send email");
-                          }
+                              if (!emailRes.ok) {
+                                const err = await emailRes.json();
+                                throw new Error(err?.error || "Failed to send email");
+                              }
 
-                          const emailData = await emailRes.json();
+                              const emailData = await emailRes.json();
+                              
+                              // Also save the assignment record (optional)
+                              const assignment = {
+                                templateId,
+                                patientId: patient.id,
+                                patientName: patient.name,
+                                patientEmail,
+                                assignedAt: new Date().toISOString(),
+                              };
+
+                              try {
+                                const assignRes = await fetch("/api/assign", {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify(assignment),
+                                });
+
+                                if (assignRes.ok) {
+                                  const assignData = await assignRes.json();
+                                  showToast(
+                                    `Form request resent successfully to ${patient.name} (${patientEmail})!`,
+                                    'success'
+                                  );
+                                }
+                              } catch (assignError) {
+                                // Assignment save failed, but email was sent
+                                console.warn("Assignment save failed:", assignError);
+                                showToast(
+                                  `Form request resent successfully to ${patient.name} (${patientEmail})!`,
+                                  'success'
+                                );
+                              }
+                            } catch (error: any) {
+                              console.error(error);
+                              showToast(
+                                `Error resending form request: ${error.message}`,
+                                'error'
+                              );
+                            }
+                          }}
+                        >
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          Resend
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          if (!templateId) return;
                           
-                          // Also save the assignment record (optional)
-                          const assignment = {
-                            templateId,
-                            patientId: patient.id,
-                            patientName: patient.name,
-                            patientEmail,
-                            assignedAt: new Date().toISOString(),
-                          };
-
+                          // For demo purposes, use the specified email
+                          const patientEmail = "fernandesi2244@gmail.com";
+                          const formUrl = "http://localhost:5173/";
+                          
+                          // Get template name (you might want to load this from your templates data)
+                          const templateName = templateId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                          
                           try {
-                            const assignRes = await fetch("/api/assign", {
+                            // Send form request email
+                            const emailRes = await fetch("/api/send-form-email", {
                               method: "POST",
                               headers: {
                                 "Content-Type": "application/json",
                               },
-                              body: JSON.stringify(assignment),
+                              body: JSON.stringify({
+                                patientEmail,
+                                patientName: patient.name,
+                                templateName,
+                                templateId
+                              }),
                             });
 
-                            if (assignRes.ok) {
-                              const assignData = await assignRes.json();
+                            if (!emailRes.ok) {
+                              const err = await emailRes.json();
+                              throw new Error(err?.error || "Failed to send email");
+                            }
+
+                            const emailData = await emailRes.json();
+                            
+                            // Mark this patient as having been sent a request
+                            setSentRequests(prev => new Set([...prev, patient.id]));
+                            
+                            // Also save the assignment record (optional)
+                            const assignment = {
+                              templateId,
+                              patientId: patient.id,
+                              patientName: patient.name,
+                              patientEmail,
+                              assignedAt: new Date().toISOString(),
+                            };
+
+                            try {
+                              const assignRes = await fetch("/api/assign", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify(assignment),
+                              });
+
+                              if (assignRes.ok) {
+                                const assignData = await assignRes.json();
+                                showToast(
+                                  `Form request sent successfully to ${patient.name} (${patientEmail})!`,
+                                  'success'
+                                );
+                              }
+                            } catch (assignError) {
+                              // Assignment save failed, but email was sent
+                              console.warn("Assignment save failed:", assignError);
                               showToast(
                                 `Form request sent successfully to ${patient.name} (${patientEmail})!`,
                                 'success'
                               );
                             }
-                          } catch (assignError) {
-                            // Assignment save failed, but email was sent
-                            console.warn("Assignment save failed:", assignError);
+                          } catch (error: any) {
+                            console.error(error);
                             showToast(
-                              `Form request sent successfully to ${patient.name} (${patientEmail})!`,
-                              'success'
+                              `Error sending form request: ${error.message}`,
+                              'error'
                             );
                           }
-                        } catch (error: any) {
-                          console.error(error);
-                          showToast(
-                            `Error sending form request: ${error.message}`,
-                            'error'
-                          );
-                        }
-                      }}
-                    >
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Send Form Request
-                    </Button>
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Send Form Request
+                      </Button>
+                    )}
                   </li>
                 ))
               ) : (
