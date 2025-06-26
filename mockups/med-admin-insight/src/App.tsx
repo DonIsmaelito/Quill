@@ -48,6 +48,11 @@ const App = () => (
           </Route>
           <Route path="/doctors-directory" element={<DoctorsDirectory />} />
           <Route
+            path="/assign-template/:templateId/:templateName"
+            element={<AssignTemplatePage />}
+          />
+          {/* Fallback route for backward compatibility */}
+          <Route
             path="/assign-template/:templateId"
             element={<AssignTemplatePage />}
           />

@@ -74,7 +74,7 @@ export const processFormData = (
         // Add table as a text field with table data
         fields.push({
           id: currentId,
-          type: "text",
+          type: "table",
           label: "", // Empty label for table type
           required: false,
           value: JSON.stringify(tableFields), // Store table data as JSON string

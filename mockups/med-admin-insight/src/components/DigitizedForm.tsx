@@ -191,7 +191,7 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
     }
 
     // Check if this is a table field (based on width and height)
-    const isTable = field.position.width === 600 && field.position.height === 200;
+    const isTable = field.type === "table" || (field.position.width === 600 && field.position.height === 200);
     if (isTable) {
       try {
         const tableFields: TableField[] = JSON.parse(field.value as string);

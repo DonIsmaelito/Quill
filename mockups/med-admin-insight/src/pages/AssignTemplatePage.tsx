@@ -4,20 +4,28 @@ import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { patientsData, Patient } from "@/data/patients"; // Assuming Patient type is exported from patients.ts
-import { Search, UserPlus, CheckCircle, XCircle } from "lucide-react";
+import { Search, UserPlus, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function AssignTemplatePage() {
-  const { templateId } = useParams<{ templateId: string }>();
+  const { templateId, templateName } = useParams<{ templateId: string; templateName?: string }>();
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredPatients, setFilteredPatients] =
     useState<Patient[]>(patientsData);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
+  const [loadingPatients, setLoadingPatients] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{
     show: boolean;
     message: string;
     type: 'success' | 'error';
   }>({ show: false, message: '', type: 'success' });
+
+  // Decode the template name from URL, or fall back to a derived name from templateId
+  const decodedTemplateName = templateName 
+    ? decodeURIComponent(templateName) 
+    : templateId 
+      ? templateId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      : "Untitled Form";
 
   useEffect(() => {
     if (searchTerm === "") {
@@ -78,7 +86,7 @@ export default function AssignTemplatePage() {
             <p className="text-medical-subtext text-base mt-1">
               Assigning template:{" "}
               <span className="font-medium text-medical-text">
-                {templateId || "N/A"}
+                {decodedTemplateName}
               </span>
             </p>
           </div>
@@ -131,16 +139,20 @@ export default function AssignTemplatePage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={loadingPatients.has(patient.id)}
                           className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-full"
                           onClick={async () => {
                             if (!templateId) return;
+                            
+                            // Set loading state
+                            setLoadingPatients(prev => new Set([...prev, patient.id]));
                             
                             // For demo purposes, use the specified email
                             const patientEmail = "fernandesi2244@gmail.com";
                             const formUrl = "http://localhost:5173/";
                             
                             // Get template name (you might want to load this from your templates data)
-                            const templateName = templateId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            const templateName = decodedTemplateName;
                             
                             try {
                               // Send form request email
@@ -167,6 +179,7 @@ export default function AssignTemplatePage() {
                               // Also save the assignment record (optional)
                               const assignment = {
                                 templateId,
+                                templateName: decodedTemplateName,
                                 patientId: patient.id,
                                 patientName: patient.name,
                                 patientEmail,
@@ -203,26 +216,47 @@ export default function AssignTemplatePage() {
                                 `Error resending form request: ${error.message}`,
                                 'error'
                               );
+                            } finally {
+                              // Clear loading state
+                              setLoadingPatients(prev => {
+                                const newSet = new Set(prev);
+                                newSet.delete(patient.id);
+                                return newSet;
+                              });
                             }
                           }}
                         >
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          Resend
+                          {loadingPatients.has(patient.id) ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus className="h-4 w-4 mr-2" />
+                              Resend
+                            </>
+                          )}
                         </Button>
                       </div>
                     ) : (
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled={loadingPatients.has(patient.id)}
+                        className="w-[189px]"
                         onClick={async () => {
                           if (!templateId) return;
+                          
+                          // Set loading state
+                          setLoadingPatients(prev => new Set([...prev, patient.id]));
                           
                           // For demo purposes, use the specified email
                           const patientEmail = "fernandesi2244@gmail.com";
                           const formUrl = "http://localhost:5173/";
                           
                           // Get template name (you might want to load this from your templates data)
-                          const templateName = templateId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                          const templateName = decodedTemplateName;
                           
                           try {
                             // Send form request email
@@ -252,6 +286,7 @@ export default function AssignTemplatePage() {
                             // Also save the assignment record (optional)
                             const assignment = {
                               templateId,
+                              templateName: decodedTemplateName,
                               patientId: patient.id,
                               patientName: patient.name,
                               patientEmail,
@@ -288,11 +323,27 @@ export default function AssignTemplatePage() {
                               `Error sending form request: ${error.message}`,
                               'error'
                             );
+                          } finally {
+                            // Clear loading state
+                            setLoadingPatients(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(patient.id);
+                              return newSet;
+                            });
                           }
                         }}
                       >
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Send Form Request
+                        {loadingPatients.has(patient.id) ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            Send Form Request
+                          </>
+                        )}
                       </Button>
                     )}
                   </li>

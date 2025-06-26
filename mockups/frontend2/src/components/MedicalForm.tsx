@@ -9,6 +9,8 @@ import { useSearchParams } from "react-router-dom";
 import { DigitizedForm } from "../../../med-admin-insight/src/components/DigitizedForm";
 // Import the processFormData function from med-admin-insight
 import { processFormData } from "../../../med-admin-insight/src/utils/formProcessing";
+// Import the FormSuccessScreen component
+import FormSuccessScreen from "./FormSuccessScreen";
 
 // Import the FormField type from med-admin-insight
 interface FormField {
@@ -136,16 +138,16 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
           className={`${isSubheader ? "mt-8" : "mt-12"} mb-6`}
         >
           {!isSubheader && !isFirstHeader && (
-            <hr className="border-blue-200 mb-6" />
+            <hr className="border-blue-200 dark:border-blue-800 mb-6" />
           )}
           <h2
             className={`font-semibold ${
-              isSubheader ? "text-lg text-gray-700" : "text-2xl text-blue-600"
+              isSubheader ? "text-lg text-gray-700 dark:text-gray-300" : "text-2xl text-blue-600 dark:text-blue-400"
             }`}
           >
             {field.label}
           </h2>
-          {isSubheader && <hr className="border-blue-100 mt-2" />}
+          {isSubheader && <hr className="border-blue-100 dark:border-blue-900 mt-2" />}
         </div>
       );
 
@@ -158,6 +160,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
 
     // Check if this is a table field (based on width and height, or if it contains table data)
     const isTable =
+      field.type === "table" ||
       (field.position.width === 600 && field.position.height === 200) ||
       (field.value &&
         typeof field.value === "string" &&
@@ -165,104 +168,165 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
 
     if (isTable) {
       try {
-        const tableFields: any[] =
-          typeof field.value === "string" ? JSON.parse(field.value) : [];
+        // Get table data from formValues first, fallback to field.value for initial structure
+        let tableData = formValues[field.id];
+        if (!tableData) {
+          // Initialize from field.value if not in formValues yet
+          tableData = typeof field.value === "string" ? JSON.parse(field.value) : field.value || [];
+          // Store the initial structure in formValues
+          onFieldChange(field.id, JSON.stringify(tableData));
+        } else if (typeof tableData === "string") {
+          // Parse if it's stored as a string
+          tableData = JSON.parse(tableData);
+        }
+        
+        // Ensure tableData is an array of rows, where each row is an array of column objects
+        let tableRows: any[][] = [];
+        if (Array.isArray(tableData)) {
+          if (tableData.length > 0 && Array.isArray(tableData[0])) {
+            // Already in multi-row format
+            tableRows = tableData;
+          } else {
+            // Single row format, convert to multi-row format
+            tableRows = [tableData];
+          }
+        }
+        
+        // If no rows exist, create an initial empty row
+        if (tableRows.length === 0) {
+          const initialRow = Array.isArray(tableData) && tableData.length > 0 ? 
+            tableData.map((col: any) => ({ ...col, value: col.type === "checkbox" ? false : "" })) : 
+            [];
+          tableRows = [initialRow];
+        }
+        
+        const addRow = () => {
+          const newRow = tableRows[0].map((col: any) => ({ 
+            ...col, 
+            value: col.type === "checkbox" ? false : "" 
+          }));
+          const updatedRows = [...tableRows, newRow];
+          onFieldChange(field.id, JSON.stringify(updatedRows));
+        };
+        
+        const removeRow = (rowIndex: number) => {
+          if (tableRows.length > 1) {
+            const updatedRows = tableRows.filter((_, index) => index !== rowIndex);
+            onFieldChange(field.id, JSON.stringify(updatedRows));
+          }
+        };
+        
+        const updateCell = (rowIndex: number, colId: string, newValue: any) => {
+          const updatedRows = tableRows.map((row, rIndex) => {
+            if (rIndex === rowIndex) {
+              return row.map((col: any) => 
+                col.id === colId ? { ...col, value: newValue } : col
+              );
+            }
+            return row;
+          });
+          onFieldChange(field.id, JSON.stringify(updatedRows));
+        };
+        
         return (
-          <div key={field.id} className="mb-6">
+          <div key={field.id} className="mb-6" data-highlighted={highlightedFields.includes(field.id)}>
             <label
               htmlFor={field.id}
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr>
-                      {tableFields.map((col: any) => (
+                      {tableRows[0].map((col: any) => (
                         <th
                           key={col.id}
-                          className="bg-gray-50 text-gray-700 font-medium text-center whitespace-nowrap px-4 py-2"
+                          className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium text-center whitespace-nowrap px-4 py-2"
                         >
                           {col.label}
                         </th>
                       ))}
+                      {tableRows.length > 1 && (
+                        <th className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium text-center whitespace-nowrap px-2 py-2 w-8">
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      {tableFields.map((col: any) => (
-                        <td
-                          key={col.id}
-                          className="bg-white whitespace-nowrap px-4 py-2"
-                        >
-                          {col.type === "checkbox" ? (
-                            <div className="flex justify-center">
+                    {tableRows.map((row, rowIndex) => (
+                      <tr key={rowIndex} className="relative">
+                        {row.map((col: any) => (
+                          <td
+                            key={col.id}
+                            className="bg-white dark:bg-gray-900 whitespace-nowrap px-4 py-2"
+                          >
+                            {col.type === "checkbox" ? (
+                              <div className="flex justify-center">
+                                <input
+                                  type="checkbox"
+                                  checked={col.value as boolean}
+                                  onChange={(e) => {
+                                    updateCell(rowIndex, col.id, e.target.checked);
+                                  }}
+                                  className="border-2 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 focus:border-blue-400 dark:focus:border-blue-500 bg-white dark:bg-gray-800"
+                                  data-highlighted={highlightedFields.includes(field.id)}
+                                />
+                              </div>
+                            ) : col.type === "date" ? (
                               <input
-                                type="checkbox"
-                                checked={col.value as boolean}
+                                type="date"
+                                value={col.value as string}
                                 onChange={(e) => {
-                                  const newValue = e.target.checked;
-                                  const updatedFields = tableFields.map(
-                                    (f: any) =>
-                                      f.id === col.id
-                                        ? { ...f, value: newValue }
-                                        : f
-                                  );
-                                  onFieldChange(
-                                    field.id,
-                                    JSON.stringify(updatedFields)
-                                  );
+                                  updateCell(rowIndex, col.id, e.target.value);
                                 }}
-                                className="border-2 border-gray-300 rounded focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                                className="w-full border border-gray-300 dark:border-gray-600 focus:border-blue-400 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-200 dark:focus:ring-blue-800 px-2 py-1 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                data-highlighted={highlightedFields.includes(field.id)}
                               />
-                            </div>
-                          ) : col.type === "date" ? (
-                            <input
-                              type="date"
-                              value={col.value as string}
-                              onChange={(e) => {
-                                const newValue = e.target.value;
-                                const updatedFields = tableFields.map(
-                                  (f: any) =>
-                                    f.id === col.id
-                                      ? { ...f, value: newValue }
-                                      : f
-                                );
-                                onFieldChange(
-                                  field.id,
-                                  JSON.stringify(updatedFields)
-                                );
-                              }}
-                              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-2 py-1 rounded bg-white"
-                            />
-                          ) : (
-                            <input
-                              type="text"
-                              value={col.value as string}
-                              onChange={(e) => {
-                                const newValue = e.target.value;
-                                const updatedFields = tableFields.map(
-                                  (f: any) =>
-                                    f.id === col.id
-                                      ? { ...f, value: newValue }
-                                      : f
-                                );
-                                onFieldChange(
-                                  field.id,
-                                  JSON.stringify(updatedFields)
-                                );
-                              }}
-                              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-2 py-1 rounded bg-white"
-                            />
-                          )}
-                        </td>
-                      ))}
-                    </tr>
+                            ) : (
+                              <input
+                                type="text"
+                                value={col.value as string}
+                                onChange={(e) => {
+                                  updateCell(rowIndex, col.id, e.target.value);
+                                }}
+                                className="w-full border border-gray-300 dark:border-gray-600 focus:border-blue-400 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-200 dark:focus:ring-blue-800 px-2 py-1 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                data-highlighted={highlightedFields.includes(field.id)}
+                              />
+                            )}
+                          </td>
+                        ))}
+                        {tableRows.length > 1 && (
+                          <td className="bg-white dark:bg-gray-900 whitespace-nowrap px-2 py-2 w-8">
+                            <button
+                              type="button"
+                              onClick={() => removeRow(rowIndex)}
+                              className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              title="Remove row"
+                            >
+                              ×
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={addRow}
+                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium flex items-center gap-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add Row
+                </button>
               </div>
             </div>
           </div>
@@ -280,7 +344,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
           <div key={field.id} className="mb-4">
             <label
               htmlFor={field.id}
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -292,7 +356,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
               required={field.required}
               value={formValues[field.id] || ""}
               onChange={(e) => onFieldChange(field.id, e.target.value)}
-              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-3 py-2 rounded-md bg-white"
+              className="w-full border border-gray-300 dark:border-gray-600 focus:border-blue-400 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-200 dark:focus:ring-blue-800 px-3 py-2 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               data-highlighted={highlightedFields.includes(field.id)}
             />
           </div>
@@ -306,11 +370,12 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
               required={field.required}
               checked={(formValues[field.id] as boolean) || false}
               onChange={(e) => onFieldChange(field.id, e.target.checked)}
-              className="border-2 border-gray-300 rounded focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+              className="border-2 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 focus:border-blue-400 dark:focus:border-blue-500 bg-white dark:bg-gray-800"
+              data-highlighted={highlightedFields.includes(field.id)}
             />
             <label
               htmlFor={field.id}
-              className="text-sm font-medium text-gray-700"
+              className="text-sm font-medium text-gray-700 dark:text-gray-300"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -320,7 +385,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
       case "radio":
         return (
           <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </label>
@@ -335,11 +400,12 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
                     required={field.required}
                     checked={formValues[field.id] === option}
                     onChange={(e) => onFieldChange(field.id, e.target.value)}
-                    className="border-2 border-gray-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+                    className="border-2 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 focus:border-blue-400 dark:focus:border-blue-500 bg-white dark:bg-gray-800"
+                    data-highlighted={highlightedFields.includes(field.id)}
                   />
                   <label
                     htmlFor={`${field.id}-${option}`}
-                    className="text-sm text-gray-700"
+                    className="text-sm text-gray-700 dark:text-gray-300"
                   >
                     {option}
                   </label>
@@ -353,7 +419,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
           <div key={field.id} className="mb-4">
             <label
               htmlFor={field.id}
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -363,7 +429,8 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
               required={field.required}
               value={formValues[field.id] || ""}
               onChange={(e) => onFieldChange(field.id, e.target.value)}
-              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-3 py-2 rounded-md bg-white"
+              className="w-full border border-gray-300 dark:border-gray-600 focus:border-blue-400 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-200 dark:focus:ring-blue-800 px-3 py-2 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              data-highlighted={highlightedFields.includes(field.id)}
             >
               <option value="">
                 {field.placeholder || "Select an option"}
@@ -381,7 +448,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
           <div key={field.id} className="mb-4">
             <label
               htmlFor={field.id}
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -392,7 +459,8 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
               required={field.required}
               value={formValues[field.id] || ""}
               onChange={(e) => onFieldChange(field.id, e.target.value)}
-              className="w-full border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 px-3 py-2 rounded-md bg-white"
+              className="w-full border border-gray-300 dark:border-gray-600 focus:border-blue-400 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-200 dark:focus:ring-blue-800 px-3 py-2 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              data-highlighted={highlightedFields.includes(field.id)}
             />
           </div>
         );
@@ -401,13 +469,16 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
           <div key={field.id} className="mb-4">
             <label
               htmlFor={field.id}
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-gray-300 transition-colors">
-              <p className="text-sm text-gray-500">Click to sign</p>
+            <div 
+              className="border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-gray-300 dark:hover:border-gray-500 transition-colors bg-gray-50 dark:bg-gray-800"
+              data-highlighted={highlightedFields.includes(field.id)}
+            >
+              <p className="text-sm text-gray-500 dark:text-gray-400">Click to sign</p>
             </div>
           </div>
         );
@@ -425,6 +496,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
       field.position.width === 600 &&
       (field.position.height === 48 || field.position.height === 36);
     const isTable =
+      field.type === "table" ||
       (field.position.width === 600 && field.position.height === 200) ||
       (field.value &&
         typeof field.value === "string" &&
@@ -449,6 +521,7 @@ const PatientFormRenderer: React.FC<PatientFormRendererProps> = ({
             field.position.width === 600 &&
             (field.position.height === 48 || field.position.height === 36);
           const isTable =
+            field.type === "table" ||
             (field.position.width === 600 && field.position.height === 200) ||
             (field.value &&
               typeof field.value === "string" &&
@@ -518,6 +591,14 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   >({});
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState<string>("");
+
+  // State for success screen
+  const [showSuccessScreen, setShowSuccessScreen] = useState(false);
+  const [submittedFormData, setSubmittedFormData] = useState<{
+    formId: string;
+    templateName: string;
+    submittedAt: string;
+  } | null>(null);
 
   // Get template ID from URL parameter
   const templateId = searchParams.get("template");
@@ -625,16 +706,33 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
   // Add effect to scroll to first highlighted field
   useEffect(() => {
     if (highlightedFields.length > 0 && formRef.current) {
+      console.log('Highlighting fields:', highlightedFields);
+      
       // Find the first highlighted field element
       const firstHighlightedField = formRef.current.querySelector(
         '[data-highlighted="true"]'
       );
+      
       if (firstHighlightedField) {
+        console.log('Found highlighted field:', firstHighlightedField);
+        
         // Scroll the field into view with smooth behavior and some offset from the top
         firstHighlightedField.scrollIntoView({
           behavior: "smooth",
           block: "center",
         });
+        
+        // Also try to scroll the parent container if it's scrollable
+        const scrollableParent = formRef.current.closest('.overflow-y-auto');
+        if (scrollableParent) {
+          console.log('Found scrollable parent, scrolling to field');
+          firstHighlightedField.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+      } else {
+        console.log('No highlighted field found in form');
       }
     }
   }, [highlightedFields]);
@@ -721,12 +819,13 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
         );
       }
 
-      toast({
-        title: "Form Submitted Successfully",
-        description: templateId
-          ? `Your ${templateName} form has been submitted successfully. The clinician has been notified.`
-          : "Your patient registration has been submitted successfully.",
+      // Show success screen instead of toast
+      setSubmittedFormData({
+        formId,
+        templateName,
+        submittedAt: filledFormData.submittedAt,
       });
+      setShowSuccessScreen(true);
     } catch (error) {
       console.error("Error submitting form:", error);
       toast({
@@ -736,58 +835,6 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
         variant: "destructive",
       });
     }
-
-    // // EHR submission logic !! NOTE: FROM MC, REVISIT LATER
-
-    // try {
-    //   // Prepare form data for EHR submission
-    //   const formData = {
-    //     formName: "Patient Registration Form",
-    //     formData: formValues,
-    //   };
-
-    //   // Submit to EHR API
-    //   const response = await fetch("http://localhost:8000/ehr/submit-form", {
-    //     method: "POST",
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //     },
-    //     body: JSON.stringify(formData),
-    //   });
-
-    //   if (!response.ok) {
-    //     throw new Error(`HTTP error! status: ${response.status}`);
-    //   }
-
-    //   const result = await response.json();
-
-    //   if (result.success) {
-    //     toast({
-    //       title: "Registration Successful",
-    //       description: `Patient registration has been submitted successfully. Patient ID: ${result.personId}`,
-    //     });
-
-    //     // Log updates made to EHR
-    //     if (result.updates && result.updates.length > 0) {
-    //       console.log("EHR Updates:", result.updates);
-    //     }
-    //   } else {
-    //     toast({
-    //       title: "Registration Failed",
-    //       description: result.errors
-    //         ? result.errors.join(", ")
-    //         : "Failed to process registration",
-    //       variant: "destructive",
-    //     });
-    //   }
-    // } catch (error) {
-    //   console.error("Error submitting form:", error);
-    //   toast({
-    //     title: "Submission Error",
-    //     description: "Failed to submit registration. Please try again.",
-    //     variant: "destructive",
-    //   });
-    // }
   };
 
   const handleReview = () => {
@@ -797,6 +844,12 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
 
   const handleCloseReview = () => {
     setReviewOpen(false);
+  };
+
+  const handleCloseSuccessScreen = () => {
+    setShowSuccessScreen(false);
+    // Optionally redirect to dashboard or home page
+    // window.location.href = '/dashboard';
   };
 
   const reviewFields = (
@@ -894,6 +947,15 @@ const MedicalForm: React.FC<MedicalFormProps> = ({
         fields={reviewFields}
         onSubmit={handleSubmit}
       />
+
+      {showSuccessScreen && (
+        <FormSuccessScreen
+          formId={submittedFormData?.formId || ""}
+          templateName={submittedFormData?.templateName || ""}
+          submittedAt={submittedFormData?.submittedAt || ""}
+          onClose={handleCloseSuccessScreen}
+        />
+      )}
     </Card>
   );
 };

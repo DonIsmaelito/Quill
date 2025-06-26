@@ -10,6 +10,7 @@ interface ChatInputProps {
   onAgentResponse?: (message: string) => void;
   onSilentUpload?: (fileName: string) => void;
   selectedLanguage?: string;
+  chatHistory?: Array<{ type: string; content: string }>;
 }
 
 const ChatInput = ({
@@ -18,6 +19,7 @@ const ChatInput = ({
   onAgentResponse,
   onSilentUpload,
   selectedLanguage = "en",
+  chatHistory = [],
 }: ChatInputProps) => {
   const [input, setInput] = useState("");
   const [uploadStatus, setUploadStatus] = useState<
@@ -367,6 +369,11 @@ const ChatInput = ({
         wsRef.current.send(`LANGUAGE:${selectedLanguage}`);
         console.log(`Sent language preference: ${selectedLanguage}`);
       }
+      
+      // Send existing chat history to maintain context
+      const historyMessage = `CHAT_HISTORY:${JSON.stringify(chatHistory)}`;
+      wsRef.current.send(historyMessage);
+      console.log("Sent chat history to WebSocket:", chatHistory.length, "messages");
     };
 
     wsRef.current.onmessage = (ev) => {

@@ -86,7 +86,7 @@ export default function Index() {
         }
         return current;
       });
-    }, 10000);
+    }, 5000);
   };
 
   const handleFieldsUpdated = (updates: { id: string; value: string }[]) => {
@@ -103,7 +103,7 @@ export default function Index() {
     setHighlightedFields(fieldIds);
     setTimeout(() => {
       setHighlightedFields([]);
-    }, 10000);
+    }, 5000);
   };
 
   const handleTemplateFieldsLoaded = (fields: FormField[], formValues: Record<string, any>) => {

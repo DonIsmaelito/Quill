@@ -93,39 +93,54 @@ const ReadOnlyFormViewer: React.FC = () => {
     }
 
     // Check if this is a table field
-    const isTable = (field.position?.width === 600 && field.position?.height === 200) || 
+    const isTable = field.type === "table" || (field.position?.width === 600 && field.position?.height === 200) || 
                    (typeof value === 'string' && value.startsWith('['));
     
     if (isTable) {
       try {
-        const tableFields: any[] = typeof value === 'string' ? JSON.parse(value) : [];
+        const tableData: any[] = typeof value === 'string' ? JSON.parse(value) : [];
+        
+        // Handle both single-row and multi-row formats
+        let tableRows: any[][] = [];
+        if (Array.isArray(tableData)) {
+          if (tableData.length > 0 && Array.isArray(tableData[0])) {
+            // Multi-row format
+            tableRows = tableData;
+          } else {
+            // Single row format
+            tableRows = [tableData];
+          }
+        }
+        
         return (
           <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr>
-                    {tableFields.map((col: any) => (
-                      <th key={col.id} className="bg-gray-50 text-gray-700 font-medium text-center whitespace-nowrap px-4 py-2">
+                    {tableRows[0]?.map((col: any) => (
+                      <th key={col.id} className="bg-gray-50 text-gray-700 font-medium text-center whitespace-nowrap px-4 py-2 border-b border-gray-200">
                         {col.label}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    {tableFields.map((col: any) => (
-                      <td key={col.id} className="bg-white whitespace-nowrap px-4 py-2 text-center">
-                        {col.type === "checkbox" ? (
-                          <span className={col.value ? "text-green-600" : "text-red-600"}>
-                            {col.value ? "Yes" : "No"}
-                          </span>
-                        ) : (
-                          <span>{col.value || "Not provided"}</span>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
+                  {tableRows.map((row, rowIndex) => (
+                    <tr key={rowIndex} className="bg-white hover:bg-gray-100 transition-colors duration-150">
+                      {row.map((col: any) => (
+                        <td key={col.id} className="whitespace-nowrap px-4 py-3 text-center border-b border-gray-100">
+                          {col.type === "checkbox" ? (
+                            <span className={col.value ? "text-green-600" : "text-red-600"}>
+                              {col.value ? "Yes" : "No"}
+                            </span>
+                          ) : (
+                            <span>{col.value || "Not provided"}</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -172,7 +187,7 @@ const ReadOnlyFormViewer: React.FC = () => {
     }
 
     // Check if this is a table field (based on width and height, or JSON structure)
-    const isTable = (field.position?.width === 600 && field.position?.height === 200) || 
+    const isTable = field.type === "table" || (field.position?.width === 600 && field.position?.height === 200) || 
                    (field.value && typeof field.value === 'string' && field.value.startsWith('['));
     
     if (isTable) {
@@ -284,7 +299,7 @@ const ReadOnlyFormViewer: React.FC = () => {
               
               formData.fields.forEach(field => {
                 const isHeader = field.position?.width === 600 && (field.position?.height === 48 || field.position?.height === 36);
-                const isTable = (field.position?.width === 600 && field.position?.height === 200) || 
+                const isTable = field.type === "table" || (field.position?.width === 600 && field.position?.height === 200) || 
                                (field.value && typeof field.value === 'string' && field.value.startsWith('['));
                 
                 if (isHeader || isTable) {

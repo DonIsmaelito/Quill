@@ -138,6 +138,8 @@ export default function Templates() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [isInPreviewMode, setIsInPreviewMode] = useState(false);
+  const [isEditingFormName, setIsEditingFormName] = useState(false);
+  const [editingFormName, setEditingFormName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Helper function to save uploaded template to form-templates folder
@@ -332,6 +334,61 @@ export default function Templates() {
     }
   };
 
+  // Function to update template name and save to file
+  const updateTemplateName = async (templateId: string, newName: string, fields: FormField[]) => {
+    try {
+      setIsSaving(true);
+      setSaveStatus("Saving name changes...");
+      
+      // Get the current template
+      const currentTemplate = templates.find(t => t.id === templateId);
+      if (!currentTemplate) {
+        console.error('Template not found:', templateId);
+        setSaveStatus("Error: Template not found");
+        return false;
+      }
+      
+      // Create updated template data with the new name and fields
+      const updatedTemplateData = {
+        ...currentTemplate,
+        name: newName.trim(),
+        fields: JSON.stringify(fields, null, 2), // Save FormField array as stringified JSON
+        lastEditedOn: new Date().toISOString(),
+        lastEditedBy: { name: "Current User" }
+      };
+      
+      // Remove properties that shouldn't be in the JSON file
+      delete updatedTemplateData.complianceStatus;
+      delete updatedTemplateData.missingConsentFields;
+      delete updatedTemplateData.signatureFields;
+      
+      // Save to file
+      const success = await saveTemplateToFile(templateId, updatedTemplateData);
+      
+      if (success) {
+        // Update the local state
+        setTemplates(prev => prev.map(t => 
+          t.id === templateId 
+            ? { ...t, name: newName.trim(), fields: JSON.stringify(fields, null, 2), lastEditedOn: new Date() }
+            : t
+        ));
+        
+        setSaveStatus("Name updated successfully!");
+        setTimeout(() => setSaveStatus(""), 3000);
+      } else {
+        setSaveStatus("Error saving name changes");
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Error updating template name:', error);
+      setSaveStatus("Error saving name changes");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Manual save function
   const handleManualSave = async () => {
     if (selectedTemplateId && extractedFields.length > 0) {
@@ -349,6 +406,43 @@ export default function Templates() {
         // For regular templates, save to file
         await updateTemplateFields(selectedTemplateId, extractedFields);
       }
+    }
+  };
+
+  // Function to handle form name updates
+  const handleFormNameUpdate = async (newName: string) => {
+    if (!selectedTemplateId || !newName.trim()) return;
+
+    try {
+      // Update the form header field if it exists
+      const updatedFields = extractedFields.map(field => {
+        if (field.id === "form-header") {
+          return { ...field, label: newName.trim() };
+        }
+        return field;
+      });
+
+      setExtractedFields(updatedFields);
+
+      // Save the changes
+      if (selectedTemplateId.startsWith("uploaded-")) {
+        // For uploaded templates, just update local state
+        setTemplates(prev => prev.map(t => 
+          t.id === selectedTemplateId 
+            ? { ...t, name: newName.trim(), fields: JSON.stringify(updatedFields, null, 2), lastEditedOn: new Date() }
+            : t
+        ));
+        setSaveStatus("Form name updated!");
+        setTimeout(() => setSaveStatus(""), 3000);
+      } else {
+        // For regular templates, save to file with the new name
+        await updateTemplateName(selectedTemplateId, newName, updatedFields);
+      }
+
+      setIsEditingFormName(false);
+    } catch (error) {
+      console.error('Error updating form name:', error);
+      setSaveStatus("Error updating form name");
     }
   };
 
@@ -372,6 +466,7 @@ export default function Templates() {
     setSelectedPdfUrl(template.pdfUrl);
     setSelectedTemplateId(template.id);
     setIsInPreviewMode(true);
+    setEditingFormName(template.name); // Set initial form name for editing
     
     // Don't reload templates here as it can cause the preview to disappear
     // The template data in state should be sufficient
@@ -486,11 +581,35 @@ export default function Templates() {
     setSelectedPdfUrl(null);
     setSelectedTemplateId(null);
     setIsInPreviewMode(false);
+    setIsEditingFormName(false);
+    setEditingFormName("");
   };
 
   const handleProceed = () => {
     if (selectedTemplateId) {
-      navigate(`/assign-template/${selectedTemplateId}`);
+      const template = templates.find(t => t.id === selectedTemplateId);
+      console.log('Selected template:', template); // Debug log
+      
+      if (!template) {
+        console.error('Template not found for ID:', selectedTemplateId);
+        alert('Template not found. Please try again.');
+        return;
+      }
+      
+      const templateName = template.name || "Untitled Form";
+      console.log('Template name:', templateName); // Debug log
+      
+      // Encode the template name for URL safety, handling special characters
+      const encodedTemplateName = encodeURIComponent(templateName);
+      console.log('Encoded template name:', encodedTemplateName); // Debug log
+      
+      const url = `/assign-template/${selectedTemplateId}/${encodedTemplateName}`;
+      console.log('Navigation URL:', url); // Debug log
+      
+      navigate(url);
+    } else {
+      console.error('No selected template ID');
+      alert('No template selected. Please select a template first.');
     }
   };
 
@@ -529,6 +648,7 @@ export default function Templates() {
       setSelectedPdfUrl(objectUrl);
       setSelectedTemplateId(newTemplate.id);
       setIsInPreviewMode(true);
+      setEditingFormName(fileNameWithoutExtension); // Set initial form name for uploaded templates
       setIsProcessing(true);
 
       try {
@@ -655,6 +775,68 @@ export default function Templates() {
                 <ArrowLeft className="h-4 w-4" />
                 Back to Templates
               </Button>
+              
+              {/* Form Name Editor */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-5 w-5 text-medical-primary" />
+                    <span className="text-sm font-medium text-gray-600">Form Name:</span>
+                  </div>
+                  {isEditingFormName ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="text"
+                        value={editingFormName}
+                        onChange={(e) => setEditingFormName(e.target.value)}
+                        className="w-64 text-sm"
+                        placeholder="Enter form name..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleFormNameUpdate(editingFormName);
+                          } else if (e.key === 'Escape') {
+                            setIsEditingFormName(false);
+                            setEditingFormName(templates.find(t => t.id === selectedTemplateId)?.name || "");
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => handleFormNameUpdate(editingFormName)}
+                        className="bg-medical-primary hover:bg-medical-primary/90 text-white"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setIsEditingFormName(false);
+                          setEditingFormName(templates.find(t => t.id === selectedTemplateId)?.name || "");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-semibold text-medical-text">
+                        {templates.find(t => t.id === selectedTemplateId)?.name || "Untitled Form"}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setIsEditingFormName(true)}
+                        className="text-medical-primary hover:text-medical-primary hover:bg-medical-primary/10"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Original PDF View */}
                 <div className="aspect-[8.5/11] w-full border rounded-lg overflow-hidden shadow-md">

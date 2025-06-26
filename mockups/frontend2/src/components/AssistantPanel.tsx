@@ -10,6 +10,7 @@ import {
   Mic,
   AudioWaveform,
   Camera,
+  FastForward,
 } from "lucide-react";
 import { ragService } from "../services/ragService";
 import { toast } from "sonner";
@@ -72,6 +73,14 @@ export function AssistantPanel({
     formValuesRef.current = formValues;
   }, [formValues]);
 
+  // Send language updates to WebSocket when language changes
+  useEffect(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN && selectedLanguage) {
+      wsRef.current.send(`LANGUAGE:${selectedLanguage}`);
+      console.log("Language updated via useEffect:", selectedLanguage);
+    }
+  }, [selectedLanguage]);
+
   // Load saved language preference from localStorage
   useEffect(() => {
     const savedLanguage = localStorage.getItem("quill-language");
@@ -85,7 +94,7 @@ export function AssistantPanel({
     setSelectedLanguage(languageCode);
     localStorage.setItem("quill-language", languageCode);
 
-    // Add a system message to inform the user about the language change
+    // Add a subtle system message to inform the user about the language change
     const languageNames: { [key: string]: string } = {
       en: "English",
       es: "Spanish",
@@ -97,7 +106,7 @@ export function AssistantPanel({
       ar: "Arabic",
     };
 
-    const systemMessage = `Language switched to ${languageNames[languageCode]}. I'll now respond in ${languageNames[languageCode]}.`;
+    const systemMessage = `🌐 Switched to ${languageNames[languageCode]}. I'll continue our conversation in ${languageNames[languageCode]}.`;
     const newMessage: Message = {
       id: Date.now().toString(),
       content: systemMessage,
@@ -109,7 +118,7 @@ export function AssistantPanel({
 
   // Reset messages and formValuesRef when formFields changes
   useEffect(() => {
-    const welcomeMessage = generateWelcomeMessage(formTitle, formFields);
+    const welcomeMessage = generateWelcomeMessage(formTitle, formFields, selectedLanguage);
     setMessages([
       {
         id: "1",
@@ -275,14 +284,28 @@ export function AssistantPanel({
 
   const generateWelcomeMessage = (
     title: string,
-    fields: FormField[]
+    fields: FormField[],
+    language: string = selectedLanguage
   ): string => {
-    const suggestions = generateDocumentSuggestions(fields);
-    return `Welcome! I'm here to help you fill out the ${title}. ${suggestions}`;
+    const suggestions = generateDocumentSuggestions(fields, language);
+    
+    // Language-specific welcome messages
+    const welcomeMessages = {
+      en: `Welcome! I'm here to help you fill out the ${title}. ${suggestions}`,
+      es: `¡Bienvenido! Estoy aquí para ayudarte a completar el ${title}. ${suggestions}`,
+      fr: `Bienvenue ! Je suis ici pour vous aider à remplir le ${title}. ${suggestions}`,
+      de: `Willkommen! Ich bin hier, um Ihnen beim Ausfüllen des ${title} zu helfen. ${suggestions}`,
+      it: `Benvenuto! Sono qui per aiutarti a compilare il ${title}. ${suggestions}`,
+      pt: `Bem-vindo! Estou aqui para ajudá-lo a preencher o ${title}. ${suggestions}`,
+      zh: `欢迎！我在这里帮助您填写${title}。${suggestions}`,
+      ar: `مرحباً! أنا هنا لمساعدتك في ملء ${title}. ${suggestions}`,
+    };
+    
+    return welcomeMessages[language as keyof typeof welcomeMessages] || welcomeMessages.en;
   };
 
   /* TODO: Let LLM figure out what documents are needed based on the form fields */
-  const generateDocumentSuggestions = (fields: FormField[]): string => {
+  const generateDocumentSuggestions = (fields: FormField[], language: string): string => {
     const suggestions = [];
 
     if (
@@ -313,12 +336,31 @@ export function AssistantPanel({
     }
 
     if (suggestions.length === 0) {
-      return "You can upload any relevant documents to help fill out this form.";
+      const defaultMessages = {
+        en: "You can upload any relevant documents to help fill out this form.",
+        es: "Puedes subir cualquier documento relevante para ayudar a completar este formulario.",
+        fr: "Vous pouvez télécharger tout document pertinent pour vous aider à remplir ce formulaire.",
+        de: "Sie können relevante Dokumente hochladen, um Ihnen beim Ausfüllen dieses Formulars zu helfen.",
+        it: "Puoi caricare qualsiasi documento pertinente per aiutarti a compilare questo modulo.",
+        pt: "Você pode fazer upload de documentos relevantes para ajudar a preencher este formulário.",
+        zh: "您可以上传任何相关文档来帮助填写此表格。",
+        ar: "يمكنك تحميل أي مستندات ذات صلة للمساعدة في ملء هذا النموذج.",
+      };
+      return defaultMessages[language as keyof typeof defaultMessages] || defaultMessages.en;
     }
 
-    return `To help fill out this form, you can upload your ${suggestions.join(
-      ", "
-    )}.`;
+    const suggestionMessages = {
+      en: `To help fill out this form, you can upload your ${suggestions.join(", ")}.`,
+      es: `Para ayudar a completar este formulario, puedes subir tu ${suggestions.join(", ")}.`,
+      fr: `Pour vous aider à remplir ce formulaire, vous pouvez télécharger votre ${suggestions.join(", ")}.`,
+      de: `Um Ihnen beim Ausfüllen dieses Formulars zu helfen, können Sie Ihre ${suggestions.join(", ")} hochladen.`,
+      it: `Per aiutarti a compilare questo modulo, puoi caricare il tuo ${suggestions.join(", ")}.`,
+      pt: `Para ajudá-lo a preencher este formulário, você pode fazer upload do seu ${suggestions.join(", ")}.`,
+      zh: `为了帮助填写此表格，您可以上传您的${suggestions.join("、")}。`,
+      ar: `للمساعدة في ملء هذا النموذج، يمكنك تحميل ${suggestions.join(" أو ")}.`,
+    };
+
+    return suggestionMessages[language as keyof typeof suggestionMessages] || suggestionMessages.en;
   };
 
   const handleSendMessage = async (message: string) => {
@@ -366,13 +408,9 @@ export function AssistantPanel({
           const fieldUpdatesString = fieldUpdatesMatch[0].replace(/'/g, '"');
           const updatesObj = JSON.parse(fieldUpdatesString);
           updatedFields = updatesObj.field_updates || [];
-          console.log("Field updates:", updatedFields);
-          // Remove the field updates from the response
-          displayResponse = response.replace(fieldUpdatesMatch[0], "").trim();
-          console.log(
-            "Display response after removing fields:",
-            displayResponse
-          );
+          displayResponse = displayResponse
+            .replace(fieldUpdatesMatch[0], "")
+            .trim();
         } catch (error) {
           console.error("Error parsing field updates:", error);
         }
@@ -392,10 +430,48 @@ export function AssistantPanel({
 
       // Extract mentioned fields from the response
       const mentionedFields = formFields
-        .filter((field) =>
-          displayResponse.toLowerCase().includes(field.label.toLowerCase())
-        )
+        .filter((field) => {
+          const fieldLabel = field.label.toLowerCase();
+          const responseText = displayResponse.toLowerCase();
+          
+          // Only highlight fields if there are actual updates OR if the field is explicitly mentioned in a clear context
+          const hasUpdates = updatedFields.length > 0;
+          
+          // Use word boundaries to avoid partial matches
+          const wordBoundaryPattern = new RegExp(`\\b${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+          
+          // Check for exact phrase matches
+          const exactMatch = wordBoundaryPattern.test(responseText);
+          
+          // More restrictive context patterns - only match when the assistant is clearly referring to the field
+          const contextPatterns = [
+            new RegExp(`(?:I've updated|I've filled|I've completed|I've entered)\\s+(?:the\\s+)?${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
+            new RegExp(`${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(?:has been|is now|has been updated|has been filled)`, 'i'),
+            new RegExp(`(?:the\\s+)?${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(?:field|input)\\s+(?:is|has|contains)`, 'i'),
+          ];
+          
+          const hasContextMatch = contextPatterns.some(pattern => pattern.test(responseText));
+          
+          // Only match if there are updates OR if there's a very clear mention
+          const isMatched = hasUpdates ? (exactMatch || hasContextMatch) : hasContextMatch;
+          
+          if (isMatched) {
+            console.log(`Field "${field.label}" matched:`, {
+              fieldLabel,
+              hasUpdates,
+              exactMatch,
+              hasContextMatch,
+              responseText: responseText.substring(0, 200) + '...'
+            });
+          }
+          
+          return isMatched;
+        })
         .map((field) => field.id);
+
+      console.log("Display response:", displayResponse);
+      console.log("Available form fields:", formFields.map(f => ({ id: f.id, label: f.label })));
+      console.log("Mentioned fields detected:", mentionedFields);
 
       // Notify parent component about mentioned fields
       onFieldsMentioned?.(mentionedFields);
@@ -416,10 +492,20 @@ export function AssistantPanel({
     } catch (error) {
       console.error("Error sending message:", error);
       // Add error message to UI
+      const errorMessages = {
+        en: "Sorry, I encountered an error while processing your message. Please try again.",
+        es: "Lo siento, encontré un error al procesar tu mensaje. Por favor, inténtalo de nuevo.",
+        fr: "Désolé, j'ai rencontré une erreur lors du traitement de votre message. Veuillez réessayer.",
+        de: "Entschuldigung, beim Verarbeiten Ihrer Nachricht ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
+        it: "Mi dispiace, ho riscontrato un errore durante l'elaborazione del tuo messaggio. Per favore riprova.",
+        pt: "Desculpe, encontrei um erro ao processar sua mensagem. Por favor, tente novamente.",
+        zh: "抱歉，处理您的消息时遇到错误。请重试。",
+        ar: "عذراً، واجهت خطأ أثناء معالجة رسالتك. يرجى المحاولة مرة أخرى.",
+      };
+      
       const errorMessage: Message = {
         id: Date.now().toString(),
-        content:
-          "Sorry, I encountered an error while processing your message. Please try again.",
+        content: errorMessages[selectedLanguage as keyof typeof errorMessages] || errorMessages.en,
         type: "assistant",
         timestamp: new Date(),
       };
@@ -508,10 +594,48 @@ export function AssistantPanel({
 
       // Extract mentioned fields from the response
       const mentionedFields = formFields
-        .filter((field) =>
-          displayResponse.toLowerCase().includes(field.label.toLowerCase())
-        )
+        .filter((field) => {
+          const fieldLabel = field.label.toLowerCase();
+          const responseText = displayResponse.toLowerCase();
+          
+          // Only highlight fields if there are actual updates OR if the field is explicitly mentioned in a clear context
+          const hasUpdates = updatedFields.length > 0;
+          
+          // Use word boundaries to avoid partial matches
+          const wordBoundaryPattern = new RegExp(`\\b${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+          
+          // Check for exact phrase matches
+          const exactMatch = wordBoundaryPattern.test(responseText);
+          
+          // More restrictive context patterns - only match when the assistant is clearly referring to the field
+          const contextPatterns = [
+            new RegExp(`(?:I've updated|I've filled|I've completed|I've entered)\\s+(?:the\\s+)?${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
+            new RegExp(`${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(?:has been|is now|has been updated|has been filled)`, 'i'),
+            new RegExp(`(?:the\\s+)?${fieldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(?:field|input)\\s+(?:is|has|contains)`, 'i'),
+          ];
+          
+          const hasContextMatch = contextPatterns.some(pattern => pattern.test(responseText));
+          
+          // Only match if there are updates OR if there's a very clear mention
+          const isMatched = hasUpdates ? (exactMatch || hasContextMatch) : hasContextMatch;
+          
+          if (isMatched) {
+            console.log(`Field "${field.label}" matched:`, {
+              fieldLabel,
+              hasUpdates,
+              exactMatch,
+              hasContextMatch,
+              responseText: responseText.substring(0, 200) + '...'
+            });
+          }
+          
+          return isMatched;
+        })
         .map((field) => field.id);
+
+      console.log("File upload - Display response:", displayResponse);
+      console.log("File upload - Available form fields:", formFields.map(f => ({ id: f.id, label: f.label })));
+      console.log("File upload - Mentioned fields detected:", mentionedFields);
 
       // Notify parent component about mentioned fields
       onFieldsMentioned?.(mentionedFields);
@@ -535,7 +659,17 @@ export function AssistantPanel({
       onFileUpload(Array.from(files));
     } catch (error) {
       console.error("Error processing files:", error);
-      toast.error("Failed to process files. Please try again.");
+      const errorMessages = {
+        en: "Failed to process files. Please try again.",
+        es: "Error al procesar archivos. Por favor, inténtalo de nuevo.",
+        fr: "Échec du traitement des fichiers. Veuillez réessayer.",
+        de: "Fehler beim Verarbeiten der Dateien. Bitte versuchen Sie es erneut.",
+        it: "Errore durante l'elaborazione dei file. Per favore riprova.",
+        pt: "Falha ao processar arquivos. Por favor, tente novamente.",
+        zh: "处理文件失败。请重试。",
+        ar: "فشل في معالجة الملفات. يرجى المحاولة مرة أخرى.",
+      };
+      toast.error(errorMessages[selectedLanguage as keyof typeof errorMessages] || errorMessages.en);
     } finally {
       setIsProcessing(false);
     }
@@ -553,9 +687,20 @@ export function AssistantPanel({
     console.log("Camera image captured:", imageFile.name);
 
     // Add user message with image
+    const userMessages = {
+      en: "📷 I've captured a form image",
+      es: "📷 He capturado una imagen del formulario",
+      fr: "📷 J'ai capturé une image du formulaire",
+      de: "📷 Ich habe ein Formularbild aufgenommen",
+      it: "📷 Ho catturato un'immagine del modulo",
+      pt: "📷 Capturei uma imagem do formulário",
+      zh: "📷 我拍摄了一张表格图片",
+      ar: "📷 لقد التقطت صورة للنموذج",
+    };
+
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: "📷 I've captured a form image",
+      content: userMessages[selectedLanguage as keyof typeof userMessages] || userMessages.en,
       type: "user",
       timestamp: new Date(),
       imageUrl: imageUrl,
@@ -564,10 +709,20 @@ export function AssistantPanel({
 
     // Add assistant response acknowledging the image
     setTimeout(() => {
+      const assistantMessages = {
+        en: "Great! I can see the form you've captured. I have digitized the form and I can help you fill this out.",
+        es: "¡Excelente! Puedo ver el formulario que has capturado. He digitalizado el formulario y puedo ayudarte a completarlo.",
+        fr: "Excellent ! Je peux voir le formulaire que vous avez capturé. J'ai numérisé le formulaire et je peux vous aider à le remplir.",
+        de: "Großartig! Ich kann das von Ihnen aufgenommene Formular sehen. Ich habe das Formular digitalisiert und kann Ihnen beim Ausfüllen helfen.",
+        it: "Perfetto! Posso vedere il modulo che hai catturato. Ho digitalizzato il modulo e posso aiutarti a compilarlo.",
+        pt: "Ótimo! Posso ver o formulário que você capturou. Digitalizei o formulário e posso ajudá-lo a preenchê-lo.",
+        zh: "太好了！我可以看到您拍摄的表格。我已经将表格数字化，可以帮助您填写。",
+        ar: "ممتاز! يمكنني رؤية النموذج الذي التقطته. لقد رقمنت النموذج ويمكنني مساعدتك في ملئه.",
+      };
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content:
-          "Great! I can see the form you've captured. I have digitized the form and I can help you fill this out.",
+        content: assistantMessages[selectedLanguage as keyof typeof assistantMessages] || assistantMessages.en,
         type: "assistant",
         timestamp: new Date(),
       };
@@ -592,6 +747,9 @@ export function AssistantPanel({
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioQueueRef = useRef<Blob[]>([]);
+  const isPlayingRef = useRef(false);
 
   // Silence detection
   const checkAudioLevel = () => {
@@ -647,12 +805,11 @@ export function AssistantPanel({
 
     console.log("Creating new WebSocket connection...");
     const ws = new WebSocket("ws://localhost:8000/voice_ws");
-    let audioQueue: Blob[] = [];
-    let isPlaying = false;
 
     const playNextAudio = () => {
-      if (audioQueue.length === 0) {
-        isPlaying = false;
+      if (audioQueueRef.current.length === 0) {
+        isPlayingRef.current = false;
+        currentAudioRef.current = null;
         if (shouldAutoListen.current) {
           startRecording();
         } else {
@@ -661,21 +818,28 @@ export function AssistantPanel({
         return;
       }
 
-      isPlaying = true;
-      const audioBlob = audioQueue.shift();
+      isPlayingRef.current = true;
+      const audioBlob = audioQueueRef.current.shift();
       if (audioBlob) {
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
+        
+        // Store the current audio element for potential stopping
+        currentAudioRef.current = audio;
+        
         audio.onended = () => {
           URL.revokeObjectURL(audioUrl);
+          currentAudioRef.current = null;
           playNextAudio();
         };
         audio.onerror = (err) => {
           console.error("Error playing audio:", err);
+          currentAudioRef.current = null;
           playNextAudio();
         };
         audio.play().catch((err) => {
           console.error("Audio playback failed:", err);
+          currentAudioRef.current = null;
           playNextAudio();
         });
       }
@@ -684,16 +848,31 @@ export function AssistantPanel({
     ws.onopen = () => {
       console.log("Voice WebSocket connected");
       wsRef.current = ws;
+      // Immediately send current language
       if (selectedLanguage) {
         ws.send(`LANGUAGE:${selectedLanguage}`);
+        console.log("Sent language to WebSocket:", selectedLanguage);
       }
+      // Immediately send form fields
       sendFormFieldsToWebSocket();
+      
+      // Send existing chat history to maintain context
+      if (messages.length > 0) {
+        const chatHistory = messages.map(msg => ({
+          type: msg.type,
+          content: msg.content
+        }));
+        const historyMessage = `CHAT_HISTORY:${JSON.stringify(chatHistory)}`;
+        ws.send(historyMessage);
+        console.log("Sent existing chat history to WebSocket:", chatHistory.length, "messages");
+      }
     };
 
     ws.onmessage = (event) => {
+      console.log("WebSocket message received:", event.data);
       if (event.data instanceof Blob) {
-        audioQueue.push(event.data);
-        if (!isPlaying) {
+        audioQueueRef.current.push(event.data);
+        if (!isPlayingRef.current) {
           setConversationState("speaking");
           playNextAudio();
         }
@@ -725,6 +904,17 @@ export function AssistantPanel({
             }
           }
 
+          // Add user transcript message if present
+          if (data.user_transcript) {
+            const userMessage: Message = {
+              id: Date.now().toString(),
+              content: data.user_transcript,
+              type: "user",
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, userMessage]);
+          }
+
           const assistantMessage: Message = {
             id: (Date.now() + 1).toString(),
             content: responseContent,
@@ -738,7 +928,17 @@ export function AssistantPanel({
           }
         } else if (data.type === "error") {
           console.error("Server error:", data.content);
-          alert("Voice processing error: " + data.content);
+          const errorMessages = {
+            en: "Voice processing error: " + data.content,
+            es: "Error de procesamiento de voz: " + data.content,
+            fr: "Erreur de traitement vocal : " + data.content,
+            de: "Sprachverarbeitungsfehler: " + data.content,
+            it: "Errore di elaborazione vocale: " + data.content,
+            pt: "Erro de processamento de voz: " + data.content,
+            zh: "语音处理错误：" + data.content,
+            ar: "خطأ في معالجة الصوت: " + data.content,
+          };
+          alert(errorMessages[selectedLanguage as keyof typeof errorMessages] || errorMessages.en);
           setConversationState("idle");
         }
       } catch (error) {
@@ -773,6 +973,12 @@ export function AssistantPanel({
       )}`;
       wsRef.current.send(formFieldsMessage);
       console.log("Sent form fields to WebSocket:", currentFormFields);
+      
+      // Also ensure current language is sent
+      if (selectedLanguage) {
+        wsRef.current.send(`LANGUAGE:${selectedLanguage}`);
+        console.log("Sent language to WebSocket:", selectedLanguage);
+      }
     }
   };
 
@@ -793,7 +999,17 @@ export function AssistantPanel({
 
       if (ws.readyState !== WebSocket.OPEN) {
         console.error("WebSocket connection timeout");
-        alert("Voice connection failed. Please try again.");
+        const timeoutMessages = {
+          en: "Voice connection failed. Please try again.",
+          es: "La conexión de voz falló. Por favor, inténtalo de nuevo.",
+          fr: "La connexion vocale a échoué. Veuillez réessayer.",
+          de: "Sprachverbindung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+          it: "Connessione vocale fallita. Per favore riprova.",
+          pt: "Conexão de voz falhou. Por favor, tente novamente.",
+          zh: "语音连接失败。请重试。",
+          ar: "فشل الاتصال الصوتي. يرجى المحاولة مرة أخرى.",
+        };
+        alert(timeoutMessages[selectedLanguage as keyof typeof timeoutMessages] || timeoutMessages.en);
         setConversationState("idle");
         return;
       }
@@ -897,11 +1113,29 @@ export function AssistantPanel({
       setConversationState("idle");
       // Show user-friendly error
       if (error.name === "NotAllowedError") {
-        alert(
-          "Microphone permission denied. Please allow microphone access and try again."
-        );
+        const permissionMessages = {
+          en: "Microphone permission denied. Please allow microphone access and try again.",
+          es: "Permiso de micrófono denegado. Por favor, permite el acceso al micrófono e inténtalo de nuevo.",
+          fr: "Permission du microphone refusée. Veuillez autoriser l'accès au microphone et réessayer.",
+          de: "Mikrofonberechtigung verweigert. Bitte erlauben Sie den Mikrofonzugriff und versuchen Sie es erneut.",
+          it: "Permesso microfono negato. Per favore, consenti l'accesso al microfono e riprova.",
+          pt: "Permissão do microfone negada. Por favor, permita o acesso ao microfone e tente novamente.",
+          zh: "麦克风权限被拒绝。请允许麦克风访问并重试。",
+          ar: "تم رفض إذن الميكروفون. يرجى السماح بالوصول إلى الميكروفون والمحاولة مرة أخرى.",
+        };
+        alert(permissionMessages[selectedLanguage as keyof typeof permissionMessages] || permissionMessages.en);
       } else {
-        alert("Could not start recording: " + error.message);
+        const errorMessages = {
+          en: "Could not start recording: " + error.message,
+          es: "No se pudo iniciar la grabación: " + error.message,
+          fr: "Impossible de démarrer l'enregistrement : " + error.message,
+          de: "Aufnahme konnte nicht gestartet werden: " + error.message,
+          it: "Impossibile avviare la registrazione: " + error.message,
+          pt: "Não foi possível iniciar a gravação: " + error.message,
+          zh: "无法开始录音：" + error.message,
+          ar: "تعذر بدء التسجيل: " + error.message,
+        };
+        alert(errorMessages[selectedLanguage as keyof typeof errorMessages] || errorMessages.en);
       }
     }
   };
@@ -971,13 +1205,29 @@ export function AssistantPanel({
       console.log("Audio permission unlocked");
     } catch (error) {
       console.error("Audio permission failed:", error);
-      alert(
-        "Audio playback permission needed. Please ensure audio is enabled."
-      );
+      const audioMessages = {
+        en: "Audio playback permission needed. Please ensure audio is enabled.",
+        es: "Se necesita permiso de reproducción de audio. Por favor, asegúrate de que el audio esté habilitado.",
+        fr: "Permission de lecture audio nécessaire. Veuillez vous assurer que l'audio est activé.",
+        de: "Audio-Wiedergabeberechtigung erforderlich. Bitte stellen Sie sicher, dass Audio aktiviert ist.",
+        it: "Permesso di riproduzione audio necessario. Assicurati che l'audio sia abilitato.",
+        pt: "Permissão de reprodução de áudio necessária. Por favor, certifique-se de que o áudio está habilitado.",
+        zh: "需要音频播放权限。请确保音频已启用。",
+        ar: "مطلوب إذن تشغيل الصوت. يرجى التأكد من تمكين الصوت.",
+      };
+      alert(audioMessages[selectedLanguage as keyof typeof audioMessages] || audioMessages.en);
     }
 
     setIsConversationActive(true);
     shouldAutoListen.current = true;
+    
+    // Ensure WebSocket is ready and language is set before starting recording
+    const ws = getWs();
+    if (ws.readyState === WebSocket.OPEN && selectedLanguage) {
+      ws.send(`LANGUAGE:${selectedLanguage}`);
+      console.log("Sent language to WebSocket before starting conversation:", selectedLanguage);
+    }
+    
     await startRecording();
   };
 
@@ -992,10 +1242,19 @@ export function AssistantPanel({
       stopRecording();
     }
 
+    // Stop current audio playback
+    stopCurrentAudio(true);
+
     // Clear any pending silence timeout
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
+    }
+
+    // Clean up WebSocket connection
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
     }
 
     // Clean up any remaining resources
@@ -1039,8 +1298,8 @@ export function AssistantPanel({
       case "processing":
         return {
           text: "Processing...",
-          icon: AudioWaveform,
-          color: "text-blue-500 animate-pulse",
+          icon: Loader2,
+          color: "text-blue-500 animate-spin",
         };
       case "speaking":
         return {
@@ -1051,10 +1310,35 @@ export function AssistantPanel({
       default:
         return {
           text: "End Conversation",
-          icon: AudioWaveform,
-          color: "text-red-500 animate-pulse",
+          icon: Mic,
+          color: "text-red-500",
         };
     }
+  };
+
+  // Function to stop current audio playback
+  const stopCurrentAudio = (isEndingConversation = false) => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+      console.log("Audio playback stopped by user");
+    }
+    
+    // Clear the audio queue and reset playing state
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    
+    // Only restart recording if we're not ending the conversation
+    if (!isEndingConversation && isConversationActive && shouldAutoListen.current) {
+      setConversationState("listening");
+      startRecording();
+    }
+  };
+
+  // Wrapper function for skip button click
+  const handleSkipClick = () => {
+    stopCurrentAudio(false); // false = not ending conversation, just skipping
   };
 
   return (
@@ -1131,7 +1415,18 @@ export function AssistantPanel({
                 <span className="text-sm font-medium">Upload</span>
               </Button>
               <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                Upload documents
+                {
+                  {
+                    en: "Upload documents",
+                    es: "Subir documentos",
+                    fr: "Télécharger des documents",
+                    de: "Dokumente hochladen",
+                    it: "Carica documenti",
+                    pt: "Fazer upload de documentos",
+                    zh: "上传文档",
+                    ar: "تحميل المستندات",
+                  }[selectedLanguage] || "Upload documents"
+                }
               </div>
             </div>
 
@@ -1147,7 +1442,18 @@ export function AssistantPanel({
                 <span className="text-sm font-medium">Scan</span>
               </Button>
               <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                Scan form with camera
+                {
+                  {
+                    en: "Scan form with camera",
+                    es: "Escanear formulario con cámara",
+                    fr: "Scanner le formulaire avec l'appareil photo",
+                    de: "Formular mit Kamera scannen",
+                    it: "Scansiona modulo con fotocamera",
+                    pt: "Digitalizar formulário com câmera",
+                    zh: "用相机扫描表格",
+                    ar: "مسح النموذج بالكاميرا",
+                  }[selectedLanguage] || "Scan form with camera"
+                }
               </div>
             </div>
 
@@ -1155,23 +1461,73 @@ export function AssistantPanel({
             <div className="group relative">
               <Button
                 variant="ghost"
-                onClick={handleConversationToggle}
+                onClick={conversationState === "speaking" ? handleSkipClick : handleConversationToggle}
                 disabled={isProcessing}
                 className={`h-12 px-4 rounded-xl transition-all duration-200 hover:scale-105 hover:shadow-md ${
-                  isConversationActive
+                  conversationState === "speaking"
+                    ? "bg-orange-50 hover:bg-orange-100 dark:bg-orange-950 dark:hover:bg-orange-900 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800"
+                    : isConversationActive
                     ? "bg-red-50 hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800"
                     : "bg-purple-50 hover:bg-purple-100 dark:bg-purple-950 dark:hover:bg-purple-900 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800"
                 }`}
               >
-                {React.createElement(getConversationStatus().icon, {
-                  className: `h-5 w-5 mr-2 ${getConversationStatus().color}`,
-                })}
+                {conversationState === "speaking" ? (
+                  <FastForward className="h-5 w-5 mr-2" />
+                ) : (
+                  React.createElement(getConversationStatus().icon, {
+                    className: `h-5 w-5 mr-2 ${getConversationStatus().color}`,
+                  })
+                )}
                 <span className="text-sm font-medium">
-                  {isConversationActive ? "Voice" : "Voice"}
+                  {conversationState === "speaking" 
+                    ? {
+                        en: "Skip",
+                        es: "Saltar",
+                        fr: "Passer",
+                        de: "Überspringen",
+                        it: "Salta",
+                        pt: "Pular",
+                        zh: "跳过",
+                        ar: "تخطي",
+                      }[selectedLanguage] || "Skip"
+                    : getConversationStatus().text
+                  }
                 </span>
               </Button>
               <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                {getConversationStatus().text}
+                {conversationState === "speaking"
+                  ? {
+                      en: "Skip current speech",
+                      es: "Saltar el habla actual",
+                      fr: "Passer le discours actuel",
+                      de: "Aktuelle Sprache überspringen",
+                      it: "Salta il discorso attuale",
+                      pt: "Pular fala atual",
+                      zh: "跳过当前语音",
+                      ar: "تخطي الكلام الحالي",
+                    }[selectedLanguage] || "Skip current speech"
+                  : isConversationActive
+                  ? {
+                      en: "Stop voice assistant",
+                      es: "Detener asistente de voz",
+                      fr: "Arrêter l'assistant vocal",
+                      de: "Sprachassistent stoppen",
+                      it: "Ferma assistente vocale",
+                      pt: "Parar assistente de voz",
+                      zh: "停止语音助手",
+                      ar: "إيقاف المساعد الصوتي",
+                    }[selectedLanguage] || "Stop voice assistant"
+                  : {
+                      en: "Start voice conversation",
+                      es: "Iniciar conversación de voz",
+                      fr: "Démarrer la conversation vocale",
+                      de: "Sprachgespräch starten",
+                      it: "Avvia conversazione vocale",
+                      pt: "Iniciar conversa por voz",
+                      zh: "开始语音对话",
+                      ar: "بدء محادثة صوتية",
+                    }[selectedLanguage] || "Start voice conversation"
+                }
               </div>
             </div>
           </div>
@@ -1182,7 +1538,18 @@ export function AssistantPanel({
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask me anything about your form..."
+                placeholder={
+                  {
+                    en: "Ask me anything about your form...",
+                    es: "Pregúntame cualquier cosa sobre tu formulario...",
+                    fr: "Demandez-moi n'importe quoi sur votre formulaire...",
+                    de: "Fragen Sie mich alles über Ihr Formular...",
+                    it: "Chiedimi qualsiasi cosa sul tuo modulo...",
+                    pt: "Pergunte-me qualquer coisa sobre seu formulário...",
+                    zh: "询问我关于您的表格的任何问题...",
+                    ar: "اسألني أي شيء عن نموذجك...",
+                  }[selectedLanguage] || "Ask me anything about your form..."
+                }
                 onKeyPress={(e) =>
                   e.key === "Enter" && handleSendMessage(input)
                 }

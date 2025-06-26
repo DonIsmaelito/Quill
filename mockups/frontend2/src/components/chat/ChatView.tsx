@@ -129,6 +129,10 @@ const ChatView = ({ onBack, messages, onMessagesUpdate }: ChatViewProps) => {
           isLoading={isLoading}
           onAgentResponse={handleAgentResponse}
           selectedLanguage={selectedLanguage}
+          chatHistory={messages.map(msg => ({
+            type: msg.type,
+            content: msg.content
+          }))}
         />
       </div>
     </div>

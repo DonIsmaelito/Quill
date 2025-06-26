@@ -1287,6 +1287,7 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "4. If unsure, offer to help find the information\n"
             "5. Always maintain patient privacy and confidentiality\n"
             "6. If asked about information not in our records, suggest relevant documents they can provide\n"
+            "7. When guiding a patient through the form, focus on smaller subsections in separate responses so as not to overwhelm them.\n"
         )
 
         update_instructions = (
@@ -1294,15 +1295,20 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
             "   {{'field_updates': [{{'id': '<field id>', 'value': '<new value>'}}]}}\n\n"
             "   For example:\n"
             "   Based on the information I have, I was able to fill out some of the form for you!"
-            "   {{'field_updates': [{{'id': 'patientName', 'value': 'John Markovich'}}, {{'id': 'email', 'value': 'jm23@gmail.com'}}]}}\n"
-            "   Provide field_updates for any field the patient explicitly asked to fill or change, OR for fields that are currently marked MISSING and for which you have reliable information.  Use the associated IDs.\n"
+            "   {{'field_updates': [{{'id': 'Medical history form-Patient-text1', 'value': 'John Markovich'}}, {{'id': 'Medical history form-Patient-text2', 'value': 'jm23@gmail.com'}}]}}\n"
+            "   IMPORTANT: Use the exact field IDs from the form fields provided in CURRENT MEDICAL FORM FIELDS AND VALUES. DON'T use labels; rather use the IDs themselves for updates. Otherwise, the update will not work.\n"
+            "   Provide field_updates for any field the patient explicitly asked to fill or change, OR for fields that are in the form AND are currently marked MISSING and for which you have reliable information. Use the associated IDs.\n"
+            "   Any dates must be provided in the format yyyy-mm-dd (e.g., 2023-10-01).\n"
+            "   If a patient has suggested that they don't want certain fields updated, do NOT include those fields in the field_updates.\n"
+            "   If guiding a patient through filling out the form, perform the field updates as soon as you can.\n"
             "   Only update field values if you have the actual new value. Don't use placeholders.\n"
             "   Do NOT include any field in field_updates if you don't have actual data for it.\n"
             "   Do NOT include fields with values like 'MISSING', 'unknown', 'N/A', or placeholders.\n"
             "   Do NOT ask the patient to confirm this information in the chat. Just provide the new values in the JSON object at the end with its 'field_updates' key as specified.\n"
             "   Do NOT reference this JSON object in the chat, just print it out as specified above. It will be filtered out later.\n"
-            "   Also, the field from the PATIENT INFORMATION doesn't have to be exactly the same as the field in the form. You can use the PATIENT INFORMATION to determine the new value for the form field.\n"
-            "   NEVER return any sort of JSON back to the user as evidence of your answer. ONLY return the JSON object at the end if you have new values to provide, as this will be filtered out later.\n\n"
+            "   Rather than summarize your changes, just provide the accurate, properly-formatted JSON for the field updates.\n"
+            "   Also, the fields from the PATIENT INFORMATION section don't have to be exactly the same as the fields in the form. You can use the PATIENT INFORMATION to determine the new values for the associated form fields.\n"
+            "   ONLY return the JSON object at the end if you have new values to provide (this will be filtered out later when the overall message is presented to the user).\n\n"
         )
 
         prompt_text = base_prompt
@@ -1332,12 +1338,41 @@ def answer_query(llm, question, user_info="", chat_history="", new_form=None, fo
         stop=None
     )
 
-    logging.info(f"OpenAI response: {response}")
+    logging.info(f"OpenAI response 1st pass: {response}")
 
     response = response.choices[0].message.content.strip()
+    
+    # First pass response from OpenAI
+    first_pass = response
+
+    # Create prompt to fix field update keys
+    fix_keys_prompt = (
+        "You are a medical form expert. Review this response and ensure all field_updates use the EXACT field IDs from CURRENT MEDICAL FORM FIELDS AND VALUES.\n\n"
+        "IMPORTANT:\n"
+        "- Only modify the JSON object with field_updates if present\n" 
+        "- Keep all other text exactly the same\n"
+        "- That is, if there is any text before the JSON object, keep it there before the revised JSON object in the response\n"
+        "- Ensure field IDs match exactly what's in the form fields\n"
+        "- Do not add or remove any fields\n"
+        "- Only change the IDs to match the IDs in the form fields based on what you think is the correct mapping\n\n"
+        f"CURRENT MEDICAL FORM FIELDS AND VALUES:\n{form_fields}\n\n"
+        f"RESPONSE TO FIX:\n{first_pass}\n\n"
+        "Return the response with corrected field IDs if needed, otherwise return it unchanged."
+    )
+
+    # Get corrected response
+    corrected = openai_client.chat.completions.create(
+        model=OPENAI_MODEL_NAME,
+        messages=[
+            {"role": "user", "content": fix_keys_prompt}
+        ],
+        temperature=0.1,
+    )
+
+    response = corrected.choices[0].message.content.strip()
 
     # response = llm.invoke(input=prompt_text)
-    logging.info(f"LLM response: {response}")
+    logging.info(f"LLM response 2nd pass: {response}")
     return response
 
 def merge_user_info(current_info: dict, new_info: dict, llm) -> dict:
@@ -2153,6 +2188,8 @@ async def voice_ws(websocket: WebSocket):
                 else:
                     audio_chunks.append(audio_data)
                 continue
+                
+            logging.debug("voice_ws: received non-audio message: %s", msg)
 
             # Text frame acts as control; expect "END" to delimit utterance
             if "text" in msg and msg["text"]:
@@ -2178,6 +2215,18 @@ async def voice_ws(websocket: WebSocket):
                         continue
                     except Exception as e:
                         logging.error("voice_ws: error parsing language: %s", e)
+                        continue
+
+                # Check for chat history update
+                if text_msg.startswith("CHAT_HISTORY:"):
+                    try:
+                        chat_history_json = text_msg[13:]  # Remove "CHAT_HISTORY:" prefix
+                        chat_history_data = json.loads(chat_history_json)
+                        conversation = chat_history_data  # Restore conversation history
+                        logging.debug(f"voice_ws: restored chat history with {len(conversation)} messages")
+                        continue
+                    except Exception as e:
+                        logging.error("voice_ws: error parsing chat history: %s", e)
                         continue
 
                 if text_msg.upper() != "END":
@@ -2340,6 +2389,7 @@ async def voice_ws(websocket: WebSocket):
                 response_json = json.dumps({
                     "type": "assistant_text",
                     "content": reply_text,  # Send full response with JSON for frontend processing
+                    "user_transcript": transcript  # Add the user's transcript
                 })
                 logging.debug("voice_ws: sending assistant text JSON")
                 await websocket.send_text(response_json)
