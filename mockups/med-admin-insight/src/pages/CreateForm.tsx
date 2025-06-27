@@ -165,27 +165,27 @@ export default function CreateForm() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50 dark:from-gray-900 dark:to-gray-800">
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 md:p-8">
           <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold text-medical-primary drop-shadow-sm leading-tight">
+            <h1 className="text-3xl md:text-4xl font-bold text-medical-primary dark:text-white drop-shadow-sm leading-tight">
               Create New Form with AI
             </h1>
-            <p className="text-medical-subtext text-base mt-1 leading-snug">
+            <p className="text-medical-subtext dark:text-gray-300 text-base mt-1 leading-snug">
               Let our AI draft your form based on your needs.
             </p>
           </div>
 
           {currentStep === "describe" && (
-            <Card className="shadow-xl">
+            <Card className="shadow-xl dark:bg-gray-800 dark:border-gray-700">
               <CardHeader>
-                <CardTitle className="flex items-center text-2xl">
-                  <Wand2 className="h-6 w-6 mr-2 text-medical-primary" /> Step
+                <CardTitle className="flex items-center text-2xl dark:text-white">
+                  <Wand2 className="h-6 w-6 mr-2 text-medical-primary dark:text-blue-400" /> Step
                   1: Describe Your Form
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="dark:text-gray-300">
                   Tell our AI what kind of form you need. The more details you
                   provide, the better the draft will be.
                 </CardDescription>
@@ -194,7 +194,7 @@ export default function CreateForm() {
                 <div>
                   <label
                     htmlFor="formDescription"
-                    className="block text-sm font-medium text-gray-700 mb-1.5"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                   >
                     Describe what you need{" "}
                     <span className="text-red-500">*</span>
@@ -205,14 +205,14 @@ export default function CreateForm() {
                     onChange={(e) => setFormDescription(e.target.value)}
                     placeholder="e.g., A pre-operative anesthesia assessment for adult knee replacement surgery, including current medications and allergy checks."
                     rows={6}
-                    className="shadow-sm focus:ring-medical-primary focus:border-medical-primary"
+                    className="shadow-sm focus:ring-medical-primary focus:border-medical-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 dark:focus:ring-blue-400 dark:focus:border-blue-400"
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label
                       htmlFor="formCategory"
-                      className="block text-sm font-medium text-gray-700 mb-1.5"
+                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                     >
                       Category (Optional)
                     </label>
@@ -220,12 +220,12 @@ export default function CreateForm() {
                       value={selectedCategory}
                       onValueChange={setSelectedCategory}
                     >
-                      <SelectTrigger id="formCategory" className="shadow-sm">
+                      <SelectTrigger id="formCategory" className="shadow-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="dark:bg-gray-700 dark:border-gray-600">
                         {formCategories.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
+                          <SelectItem key={cat} value={cat} className="dark:text-white dark:hover:bg-gray-600">
                             {cat}
                           </SelectItem>
                         ))}
@@ -235,7 +235,7 @@ export default function CreateForm() {
                   <div>
                     <label
                       htmlFor="formAudience"
-                      className="block text-sm font-medium text-gray-700 mb-1.5"
+                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                     >
                       Primary Audience (Optional)
                     </label>
@@ -243,12 +243,12 @@ export default function CreateForm() {
                       value={selectedAudience}
                       onValueChange={setSelectedAudience}
                     >
-                      <SelectTrigger id="formAudience" className="shadow-sm">
+                      <SelectTrigger id="formAudience" className="shadow-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                         <SelectValue placeholder="Select primary audience" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="dark:bg-gray-700 dark:border-gray-600">
                         {formAudiences.map((aud) => (
-                          <SelectItem key={aud} value={aud}>
+                          <SelectItem key={aud} value={aud} className="dark:text-white dark:hover:bg-gray-600">
                             {aud}
                           </SelectItem>
                         ))}
@@ -281,14 +281,14 @@ export default function CreateForm() {
 
           {currentStep === "editAI" && mockPdfPreviewUrl && (
             <div className="space-y-6">
-              <Card className="shadow-xl">
+              <Card className="shadow-xl dark:bg-gray-800 dark:border-gray-700">
                 <CardHeader className="flex flex-row justify-between items-center">
                   <div>
-                    <CardTitle className="flex items-center text-2xl">
-                      <Eye className="h-6 w-6 mr-2 text-medical-primary" /> Step
+                    <CardTitle className="flex items-center text-2xl dark:text-white">
+                      <Eye className="h-6 w-6 mr-2 text-medical-primary dark:text-blue-400" /> Step
                       2: Review & Edit Draft
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="dark:text-gray-300">
                       Here's a draft of your form. Review the preview and the
                       fields. You can regenerate or make edits.
                     </CardDescription>
@@ -296,6 +296,7 @@ export default function CreateForm() {
                   <Button
                     variant="outline"
                     onClick={() => setCurrentStep("describe")}
+                    className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                   >
                     <Edit className="h-4 w-4 mr-2" /> Back to Description
                   </Button>
@@ -303,11 +304,11 @@ export default function CreateForm() {
                 <CardContent className="space-y-6">
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <h4 className="text-lg font-medium text-gray-700">
+                      <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300">
                         Editable Fields ({generatedFields.length})
                       </h4>
                     </div>
-                    <div className="w-full border rounded-lg overflow-hidden shadow-md bg-white">
+                    <div className="w-full border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden shadow-md bg-white dark:bg-gray-700">
                       {generatedFields.length > 0 ? (
                         <DigitizedForm
                           fields={generatedFields}
@@ -335,7 +336,7 @@ export default function CreateForm() {
                         />
                       ) : (
                         <div className="flex items-center justify-center h-64">
-                          <p className="text-gray-500">
+                          <p className="text-gray-500 dark:text-gray-400">
                             No fields generated yet
                           </p>
                         </div>
@@ -343,13 +344,13 @@ export default function CreateForm() {
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter className="flex justify-between items-center pt-6 border-t">
+                <CardFooter className="flex justify-between items-center pt-6 border-t border-gray-200 dark:border-gray-600">
                   <Button
                     variant="outline"
                     size="lg"
                     onClick={handleRegenerate}
                     disabled={isGenerating}
-                    className="text-base"
+                    className="text-base dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                   >
                     {isGenerating ? (
                       <>
@@ -376,14 +377,14 @@ export default function CreateForm() {
 
           {/* Step 3: Send / Save */}
           {currentStep === "send" && (
-            <Card className="shadow-xl">
+            <Card className="shadow-xl dark:bg-gray-800 dark:border-gray-700">
               <CardHeader className="flex flex-row justify-between items-center">
                 <div>
-                  <CardTitle className="flex items-center text-2xl">
-                    <Send className="h-6 w-6 mr-2 text-medical-primary" /> Step
+                  <CardTitle className="flex items-center text-2xl dark:text-white">
+                    <Send className="h-6 w-6 mr-2 text-medical-primary dark:text-blue-400" /> Step
                     3: Finalize & Send
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="dark:text-gray-300">
                     Review send options and save or distribute your newly
                     created form.
                   </CardDescription>
@@ -391,6 +392,7 @@ export default function CreateForm() {
                 <Button
                   variant="outline"
                   onClick={() => setCurrentStep("editAI")}
+                  className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                 >
                   <Edit className="h-4 w-4 mr-2" /> Back to Editing
                 </Button>
@@ -398,38 +400,38 @@ export default function CreateForm() {
               <CardContent className="space-y-6">
                 {/* Simplified Send To Section - can be expanded based on original component */}
                 <div>
-                  <h4 className="text-lg font-medium text-gray-700 mb-2">
+                  <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Recipients & Scheduling
                   </h4>
-                  <div className="space-y-4 p-4 border rounded-md bg-slate-50/50">
+                  <div className="space-y-4 p-4 border border-gray-200 dark:border-gray-600 rounded-md bg-slate-50/50 dark:bg-gray-700/50">
                     <Button
                       variant="outline"
-                      className="w-full flex items-center justify-center gap-2 py-3 text-base"
+                      className="w-full flex items-center justify-center gap-2 py-3 text-base dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-600"
                     >
                       <Users className="h-5 w-5" /> Select Patients / Groups
                     </Button>
                     <div>
                       <label
                         htmlFor="sendOption"
-                        className="block text-sm font-medium text-gray-700 mb-1.5"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                       >
                         Send Rule
                       </label>
                       <Select value={sendOption} onValueChange={setSendOption}>
-                        <SelectTrigger id="sendOption" className="shadow-sm">
+                        <SelectTrigger id="sendOption" className="shadow-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                           <SelectValue placeholder="Choose when to send" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="immediate">
+                        <SelectContent className="dark:bg-gray-700 dark:border-gray-600">
+                          <SelectItem value="immediate" className="dark:text-white dark:hover:bg-gray-600">
                             Send Immediately Upon Saving
                           </SelectItem>
-                          <SelectItem value="manual">
+                          <SelectItem value="manual" className="dark:text-white dark:hover:bg-gray-600">
                             Manual Send Only (Save as Draft)
                           </SelectItem>
-                          <SelectItem value="before-appointment">
+                          <SelectItem value="before-appointment" className="dark:text-white dark:hover:bg-gray-600">
                             X Days Before Appointment (requires patient link)
                           </SelectItem>
-                          <SelectItem value="scheduled">
+                          <SelectItem value="scheduled" className="dark:text-white dark:hover:bg-gray-600">
                             Schedule for Specific Date/Time
                           </SelectItem>
                         </SelectContent>
@@ -444,7 +446,7 @@ export default function CreateForm() {
                       />
                       <label
                         htmlFor="trackFulfilment"
-                        className="text-sm font-medium text-gray-700"
+                        className="text-sm font-medium text-gray-700 dark:text-gray-300"
                       >
                         Track Form Fulfilment & Reminders
                       </label>
@@ -452,12 +454,12 @@ export default function CreateForm() {
                   </div>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between items-center pt-6 border-t">
+              <CardFooter className="flex justify-between items-center pt-6 border-t border-gray-200 dark:border-gray-600">
                 <Button
                   variant="outline"
                   size="lg"
                   onClick={handleSaveDraft}
-                  className="text-base"
+                  className="text-base dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                 >
                   <Save className="h-4 w-4 mr-2" /> Save as Draft
                 </Button>

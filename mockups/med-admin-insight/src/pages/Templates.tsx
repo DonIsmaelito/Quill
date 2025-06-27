@@ -56,10 +56,10 @@ interface TableField {
 }
 
 const categoryColors: Record<TemplateData["category"], string> = {
-  Administrative: "bg-blue-100 text-blue-700 border-blue-200",
-  Clinical: "bg-green-100 text-green-700 border-green-200",
-  Legal: "bg-purple-100 text-purple-700 border-purple-200",
-  Other: "bg-gray-100 text-gray-700 border-gray-200",
+  Administrative: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700",
+  Clinical: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700",
+  Legal: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700",
+  Other: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600",
 };
 
 // Helper function to calculate relative time (simplified)
@@ -761,27 +761,27 @@ export default function Templates() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50 dark:from-gray-900 dark:to-gray-800">
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 md:p-8">
           {isInPreviewMode && selectedPdfUrl ? (
-            <div className="bg-white p-6 rounded-xl shadow-lg">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
               <Button
                 variant="outline"
                 onClick={handleBackToTemplates}
-                className="mb-6 flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                className="mb-6 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to Templates
               </Button>
               
               {/* Form Name Editor */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <FileText className="h-5 w-5 text-medical-primary" />
-                    <span className="text-sm font-medium text-gray-600">Form Name:</span>
+                    <FileText className="h-5 w-5 text-medical-primary dark:text-blue-400" />
+                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Form Name:</span>
                   </div>
                   {isEditingFormName ? (
                     <div className="flex items-center gap-2">
@@ -821,14 +821,14 @@ export default function Templates() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-semibold text-medical-text">
+                      <span className="text-lg font-semibold text-medical-text dark:text-white">
                         {templates.find(t => t.id === selectedTemplateId)?.name || "Untitled Form"}
                       </span>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setIsEditingFormName(true)}
-                        className="text-medical-primary hover:text-medical-primary hover:bg-medical-primary/10"
+                        className="text-medical-primary hover:text-medical-primary hover:bg-medical-primary/10 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-400/10"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -839,7 +839,7 @@ export default function Templates() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Original PDF View */}
-                <div className="aspect-[8.5/11] w-full border rounded-lg overflow-hidden shadow-md">
+                <div className="aspect-[8.5/11] w-full border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden shadow-md">
                   <iframe
                     src={selectedPdfUrl}
                     title="Original Template"
@@ -849,12 +849,12 @@ export default function Templates() {
                   />
                 </div>
                 {/* Digitized Form View */}
-                <div className="aspect-[8.5/11] w-full border rounded-lg overflow-hidden shadow-md bg-white">
+                <div className="aspect-[8.5/11] w-full border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden shadow-md bg-white dark:bg-gray-800">
                   {isProcessing ? (
                     <div className="flex items-center justify-center h-full">
                       <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-primary mx-auto mb-4"></div>
-                        <p className="text-medical-text">Processing PDF...</p>
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-primary dark:border-blue-400 mx-auto mb-4"></div>
+                        <p className="text-medical-text dark:text-white">Processing PDF...</p>
                       </div>
                     </div>
                   ) : (
@@ -932,10 +932,10 @@ export default function Templates() {
                     <div className={cn(
                       "px-4 py-2 rounded-lg text-sm font-medium",
                       saveStatus.includes("Error") 
-                        ? "bg-red-100 text-red-700" 
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" 
                         : saveStatus.includes("saved successfully")
-                        ? "bg-green-100 text-green-700"
-                        : "bg-blue-100 text-blue-700"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
                     )}>
                       {saveStatus}
                     </div>
@@ -974,28 +974,28 @@ export default function Templates() {
             <div>
               <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
-                  <h1 className="text-3xl md:text-4xl font-bold text-medical-primary drop-shadow-sm leading-tight">
+                  <h1 className="text-3xl md:text-4xl font-bold text-medical-primary dark:text-white drop-shadow-sm leading-tight">
                     Form Templates
                   </h1>
-                  <p className="text-medical-subtext text-base mt-1 leading-snug">
+                  <p className="text-medical-subtext dark:text-gray-300 text-base mt-1 leading-snug">
                     Manage and use your form templates
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <div className="relative w-full sm:w-auto sm:min-w-[300px] md:max-w-xs">
-                    <SearchIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <SearchIcon className="absolute left-3.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                     <Input
                       type="search"
                       placeholder="Search name, category, tags..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-10 py-2 h-10 text-sm border-gray-300 rounded-lg focus:border-medical-primary focus:ring-1 focus:ring-medical-primary w-full shadow-sm hover:shadow-md transition-shadow"
+                      className="pl-10 pr-10 py-2 h-10 text-sm border-gray-300 dark:border-gray-600 rounded-lg focus:border-medical-primary dark:focus:border-blue-400 focus:ring-1 focus:ring-medical-primary dark:focus:ring-blue-400 w-full shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                     />
-                    <ChevronsUpDown className="absolute right-3.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 opacity-60 pointer-events-none" />
+                    <ChevronsUpDown className="absolute right-3.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 opacity-60 pointer-events-none" />
                   </div>
                   <Button
                     variant="outline"
-                    className="h-10 text-sm flex items-center gap-2 border-medical-primary text-medical-primary hover:bg-medical-primary/10 shadow-sm hover:shadow-md transition-shadow"
+                    className="h-10 text-sm flex items-center gap-2 border-medical-primary text-medical-primary hover:bg-medical-primary/10 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-400/10 shadow-sm hover:shadow-md transition-shadow"
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <FileUp className="h-4 w-4" /> Upload Template
@@ -1010,12 +1010,12 @@ export default function Templates() {
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-xl shadow-lg">
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
                 {isLoadingTemplates ? (
                   <div className="flex items-center justify-center py-16">
                     <div className="text-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-primary mx-auto mb-4"></div>
-                      <p className="text-medical-text">Loading templates...</p>
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-primary dark:border-blue-400 mx-auto mb-4"></div>
+                      <p className="text-medical-text dark:text-white">Loading templates...</p>
                     </div>
                   </div>
                 ) : filteredTemplates.length > 0 ? (
@@ -1023,20 +1023,20 @@ export default function Templates() {
                     {filteredTemplates.map((template) => (
                       <div
                         key={template.id}
-                        className="group bg-white rounded-xl shadow-lg hover:shadow-xl border border-gray-200/80 flex flex-col justify-between transition-all duration-300 ease-out min-h-[280px] relative overflow-hidden"
+                        className="group bg-white dark:bg-gray-700 rounded-xl shadow-lg hover:shadow-xl border border-gray-200/80 dark:border-gray-600/80 flex flex-col justify-between transition-all duration-300 ease-out min-h-[280px] relative overflow-hidden"
                       >
                         <div className="p-4 flex flex-col flex-grow">
                           <div className="flex items-start justify-between mb-2">
                             <div
-                              className="p-2.5 rounded-lg bg-medical-primary/10 inline-block cursor-pointer hover:bg-medical-primary/20 transition-colors"
+                              className="p-2.5 rounded-lg bg-medical-primary/10 dark:bg-blue-400/20 inline-block cursor-pointer hover:bg-medical-primary/20 dark:hover:bg-blue-400/30 transition-colors"
                               onClick={() => openVersionHistoryModal(template)}
                             >
-                              <FileText className="h-5 w-5 text-medical-primary" />
+                              <FileText className="h-5 w-5 text-medical-primary dark:text-blue-400" />
                             </div>
                             <div className="flex items-center gap-2">
                               <Badge
                                 variant="secondary"
-                                className="cursor-pointer hover:bg-gray-200 text-xs"
+                                className="cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 text-xs"
                                 onClick={() =>
                                   openVersionHistoryModal(template)
                                 }
@@ -1054,15 +1054,15 @@ export default function Templates() {
                               </Badge>
                             </div>
                           </div>
-                          <h3 className="font-semibold text-medical-text text-base mb-1 leading-tight line-clamp-2">
+                          <h3 className="font-semibold text-medical-text dark:text-white text-base mb-1 leading-tight line-clamp-2">
                             {template.name}
                           </h3>
                           {template.description && (
-                            <p className="text-xs text-gray-500 mb-3 leading-snug flex-grow line-clamp-3">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-snug flex-grow line-clamp-3">
                               {template.description}
                             </p>
                           )}
-                          <div className="mt-auto pt-2 flex items-center justify-between text-xs text-gray-500">
+                          <div className="mt-auto pt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                             <div className="flex items-center gap-1.5">
                               {template.lastEditedBy ? (
                                 <Avatar className="h-5 w-5">
@@ -1075,7 +1075,7 @@ export default function Templates() {
                                   </AvatarFallback>
                                 </Avatar>
                               ) : (
-                                <UserCircle className="h-5 w-5 text-gray-400" />
+                                <UserCircle className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                               )}
                               <span>
                                 {template.lastEditedOn
@@ -1091,24 +1091,24 @@ export default function Templates() {
                                 className={cn(
                                   "h-5 w-5",
                                   template.complianceStatus === "ok"
-                                    ? "text-green-500"
+                                    ? "text-green-500 dark:text-green-400"
                                     : template.complianceStatus === "warning"
-                                    ? "text-yellow-500"
-                                    : "text-red-500"
+                                    ? "text-yellow-500 dark:text-yellow-400"
+                                    : "text-red-500 dark:text-red-400"
                                 )}
                               />
                             </div>
                           </div>
                         </div>
 
-                        <div className="px-4 pb-3 pt-2 border-t border-gray-100 flex items-center justify-between">
-                          <span className="text-xs text-gray-500">
+                        <div className="px-4 pb-3 pt-2 border-t border-gray-100 dark:border-gray-600 flex items-center justify-between">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             {template.uses} uses
                           </span>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-medical-primary hover:text-medical-primary hover:bg-medical-primary/10 p-1.5 h-auto"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-medical-primary hover:text-medical-primary hover:bg-medical-primary/10 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-400/10 p-1.5 h-auto"
                             onClick={() => handleUseTemplate(template)}
                           >
                             <PlusCircle className="h-4 w-4 mr-1" /> Use
@@ -1116,28 +1116,28 @@ export default function Templates() {
                         </div>
 
                         <div
-                          className="absolute bottom-0 left-0 right-0 bg-gray-50/90 backdrop-blur-sm p-2 border-t border-gray-200 
+                          className="absolute bottom-0 left-0 right-0 bg-gray-50/90 dark:bg-gray-600/90 backdrop-blur-sm p-2 border-t border-gray-200 dark:border-gray-500 
                                         opacity-0 group-hover:opacity-100 transition-all duration-300 ease-out 
                                         translate-y-full group-hover:translate-y-0 flex justify-around items-center"
                         >
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-gray-600 hover:text-medical-primary h-7 w-7"
+                            className="text-gray-600 dark:text-gray-300 hover:text-medical-primary dark:hover:text-blue-400 h-7 w-7"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-gray-600 hover:text-medical-primary h-7 w-7"
+                            className="text-gray-600 dark:text-gray-300 hover:text-medical-primary dark:hover:text-blue-400 h-7 w-7"
                           >
                             <Tag className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-gray-600 hover:text-medical-primary h-7 w-7"
+                            className="text-gray-600 dark:text-gray-300 hover:text-medical-primary dark:hover:text-blue-400 h-7 w-7"
                           >
                             <UploadCloud className="h-4 w-4" />
                           </Button>
@@ -1154,7 +1154,7 @@ export default function Templates() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-gray-500 py-16">
+                  <p className="text-center text-gray-500 dark:text-gray-400 py-16">
                     {templates.length === 0 
                       ? "No templates found. Upload a template to get started."
                       : "No templates found matching your search."
@@ -1182,14 +1182,14 @@ export default function Templates() {
           onClick={() => setIsVersionHistoryModalOpen(false)}
         >
           <div
-            className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg"
+            className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-semibold mb-4">
+            <h2 className="text-xl font-semibold mb-4 dark:text-white">
               Version History for: {selectedTemplateForModal.name} (v
               {selectedTemplateForModal.version})
             </h2>
-            <p>
+            <p className="dark:text-gray-300">
               Placeholder for version history, diff viewer, and rollback
               options.
             </p>
@@ -1208,21 +1208,21 @@ export default function Templates() {
           onClick={() => setIsComplianceModalOpen(false)}
         >
           <div
-            className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg"
+            className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-semibold mb-4">
+            <h2 className="text-xl font-semibold mb-4 dark:text-white">
               Compliance Checklist for: {selectedTemplateForModal.name}
             </h2>
-            <p className="mb-2">
+            <p className="mb-2 dark:text-gray-300">
               Status:{" "}
               <span
                 className={cn(
                   selectedTemplateForModal.complianceStatus === "ok"
-                    ? "text-green-600"
+                    ? "text-green-600 dark:text-green-400"
                     : selectedTemplateForModal.complianceStatus === "warning"
-                    ? "text-yellow-600"
-                    : "text-red-600",
+                    ? "text-yellow-600 dark:text-yellow-400"
+                    : "text-red-600 dark:text-red-400",
                   "font-semibold"
                 )}
               >
@@ -1232,10 +1232,10 @@ export default function Templates() {
             {selectedTemplateForModal.missingConsentFields &&
               selectedTemplateForModal.missingConsentFields.length > 0 && (
                 <div className="mb-3">
-                  <p className="font-medium text-sm">
+                  <p className="font-medium text-sm dark:text-gray-300">
                     Missing/Attention needed:
                   </p>
-                  <ul className="list-disc list-inside text-sm text-gray-700">
+                  <ul className="list-disc list-inside text-sm text-gray-700 dark:text-gray-300">
                     {selectedTemplateForModal.missingConsentFields.map(
                       (field) => (
                         <li key={field}>{field}</li>
@@ -1244,7 +1244,7 @@ export default function Templates() {
                   </ul>
                 </div>
               )}
-            <p>Placeholder for detailed compliance checklist items.</p>
+            <p className="dark:text-gray-300">Placeholder for detailed compliance checklist items.</p>
             <Button
               onClick={() => setIsComplianceModalOpen(false)}
               className="mt-4"

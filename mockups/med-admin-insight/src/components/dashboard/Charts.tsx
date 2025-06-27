@@ -55,7 +55,7 @@ const DonutCenterLabel = ({
           y="47%"
           textAnchor="middle"
           dominantBaseline="middle"
-          className="fill-medical-text font-semibold text-xl"
+          className="fill-medical-text dark:fill-white font-semibold text-xl"
         >
           Total
         </text>
@@ -64,7 +64,7 @@ const DonutCenterLabel = ({
           y="57%"
           textAnchor="middle"
           dominantBaseline="middle"
-          className="fill-medical-subtext text-sm"
+          className="fill-medical-subtext dark:fill-gray-300 text-sm"
         >
           {total} Forms
         </text>
@@ -84,7 +84,7 @@ const DonutCenterLabel = ({
         y="47%"
         textAnchor="middle"
         dominantBaseline="middle"
-        className="fill-medical-text font-semibold text-lg"
+        className="fill-medical-text dark:fill-white font-semibold text-lg"
         style={{ fill: activeEntry.color }}
       >
         {activeEntry.name}
@@ -94,7 +94,7 @@ const DonutCenterLabel = ({
         y="57%"
         textAnchor="middle"
         dominantBaseline="middle"
-        className="fill-medical-subtext text-base"
+        className="fill-medical-subtext dark:fill-gray-300 text-base"
       >
         {percentage}%
       </text>
@@ -120,12 +120,12 @@ export function FormCompletionChart({
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-xl font-semibold text-medical-text leading-tight">
+        <h3 className="text-xl font-semibold text-medical-text dark:text-white leading-tight">
           Form Completion Rates
         </h3>
-        <div className="text-sm text-medical-subtext">2025</div>
+        <div className="text-sm text-medical-subtext dark:text-gray-300">2025</div>
       </div>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
@@ -134,9 +134,9 @@ export function FormCompletionChart({
             margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
             onClick={handleBarClick}
           >
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb dark:stroke-gray-600" />
+            <XAxis dataKey="month" tick={{ fontSize: 12, fill: "currentColor" }} className="dark:text-gray-300" />
+            <YAxis tick={{ fontSize: 12, fill: "currentColor" }} className="dark:text-gray-300" />
             <Tooltip
               contentStyle={{
                 backgroundColor: "rgba(255, 255, 255, 0.9)",
@@ -167,7 +167,7 @@ export function FormCompletionChart({
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex justify-center mt-2 text-sm">
+      <div className="flex justify-center mt-2 text-sm dark:text-gray-300">
         <div className="flex items-center mr-4">
           <div className="w-3 h-3 rounded-full bg-medical-primary mr-1"></div>{" "}
           {/* Matches 'Completed' bar */}
@@ -197,12 +197,12 @@ export function FormTypeChart() {
   const totalValue = formTypeData.reduce((sum, entry) => sum + entry.value, 0);
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-xl font-semibold text-medical-text leading-tight">
+        <h3 className="text-xl font-semibold text-medical-text dark:text-white leading-tight">
           Form Types Distribution
         </h3>
-        <button className="text-medical-subtext">
+        <button className="text-medical-subtext dark:text-gray-300">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-5 w-5"

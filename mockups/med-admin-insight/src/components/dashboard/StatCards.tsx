@@ -15,10 +15,9 @@ export function StatCards() {
         value="250"
         change={40}
         icon={<FileText />}
-        bgColor="bg-sky-100"
-        textColor="text-sky-600"
-        cardBgColor="bg-sky-500"
-        cardTextColor="text-white"
+        bgColor="bg-sky-100 dark:bg-sky-900/30"
+        textColor="text-sky-600 dark:text-sky-400"
+        cardBgColor="bg-white dark:bg-gray-800"
         sparklineData={sparkline1}
       />
       <StatCard
@@ -26,10 +25,9 @@ export function StatCards() {
         value="156"
         change={35}
         icon={<CheckCircle />}
-        bgColor="bg-green-100"
-        textColor="text-green-600"
-        cardBgColor="bg-green-500"
-        cardTextColor="text-white"
+        bgColor="bg-green-100 dark:bg-green-900/30"
+        textColor="text-green-600 dark:text-green-400"
+        cardBgColor="bg-white dark:bg-gray-800"
         sparklineData={sparkline2}
       />
       <StatCard
@@ -37,10 +35,9 @@ export function StatCards() {
         value="198"
         change={-15}
         icon={<Clock />}
-        bgColor="bg-yellow-100"
-        textColor="text-yellow-600"
-        cardBgColor="bg-yellow-500"
-        cardTextColor="text-white"
+        bgColor="bg-yellow-100 dark:bg-yellow-900/30"
+        textColor="text-yellow-600 dark:text-yellow-400"
+        cardBgColor="bg-white dark:bg-gray-800"
         sparklineData={sparkline3}
       />
       <StatCard
@@ -48,10 +45,9 @@ export function StatCards() {
         value="100"
         change={25}
         icon={<Users />}
-        bgColor="bg-purple-100"
-        textColor="text-purple-600"
-        cardBgColor="bg-purple-500"
-        cardTextColor="text-white"
+        bgColor="bg-purple-100 dark:bg-purple-900/30"
+        textColor="text-purple-600 dark:text-purple-400"
+        cardBgColor="bg-white dark:bg-gray-800"
         sparklineData={sparkline4}
       />
     </div>

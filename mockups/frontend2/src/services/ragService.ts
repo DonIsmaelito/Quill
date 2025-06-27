@@ -40,6 +40,19 @@ class RAGService {
     }
   }
 
+  // Method to update conversation history from external sources (like voice chat)
+  updateConversationHistory(messages: Array<{ type: "user" | "assistant"; content: string }>) {
+    // Convert assistant messages to bot messages for RAG service compatibility
+    const convertedMessages: Message[] = messages.map(msg => ({
+      type: msg.type === "assistant" ? "bot" : "user",
+      content: msg.content
+    }));
+    
+    // Update the conversation history
+    this.conversationHistory = convertedMessages;
+    console.log("Updated RAG service conversation history:", this.conversationHistory.length, "messages");
+  }
+
   private async loadDocuments() {
     try {
       const response = await fetch(`${API_BASE_URL}/documents`);
@@ -223,11 +236,8 @@ class RAGService {
       const responseContent =
         typeof response === "string" ? response : response.content;
 
-      // Update conversation history
-      this.conversationHistory.push(
-        { type: "user", content: message },
-        { type: "bot", content: responseContent }
-      );
+      // Note: Conversation history is now managed externally by the AssistantPanel
+      // No need to update this.conversationHistory here
 
       return responseContent;
     } catch (error) {

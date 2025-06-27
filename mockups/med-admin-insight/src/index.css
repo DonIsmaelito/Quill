@@ -95,3 +95,26 @@
     @apply bg-background text-foreground font-['Inter',sans-serif];
   }
 }
+
+/* Additional dark mode utilities */
+@layer utilities {
+  .dark .medical-primary {
+    @apply text-blue-400;
+  }
+  
+  .dark .medical-text {
+    @apply text-white;
+  }
+  
+  .dark .medical-subtext {
+    @apply text-gray-400;
+  }
+  
+  .dark .medical-background {
+    @apply bg-gray-900;
+  }
+  
+  .dark .medical-teal {
+    @apply bg-blue-400;
+  }
+}

@@ -384,6 +384,9 @@ export function AssistantPanel({
       setInput("");
       setIsProcessing(true);
 
+      // Sync RAG service conversation history before processing
+      syncRAGServiceHistory();
+
       // Process message with form fields
       const response = await ragService.processUserMessage(
         message,
@@ -489,6 +492,12 @@ export function AssistantPanel({
       if (updatedFields.length > 0) {
         onFieldsUpdated?.(updatedFields);
       }
+
+      // Sync RAG service conversation history
+      syncRAGServiceHistory();
+
+      // Send updated chat history to WebSocket for voice agent context
+      sendChatHistoryToWebSocket();
     } catch (error) {
       console.error("Error sending message:", error);
       // Add error message to UI
@@ -653,6 +662,12 @@ export function AssistantPanel({
       if (updatedFields.length > 0) {
         onFieldsUpdated?.(updatedFields);
       }
+
+      // Sync RAG service conversation history
+      syncRAGServiceHistory();
+
+      // Send updated chat history to WebSocket for voice agent context
+      sendChatHistoryToWebSocket();
       // ~~~~
 
       // const filledFields = await ragService.fillFormFields(formFields);
@@ -913,6 +928,9 @@ export function AssistantPanel({
               timestamp: new Date(),
             };
             setMessages((prev) => [...prev, userMessage]);
+            
+            // Sync RAG service conversation history
+            syncRAGServiceHistory();
           }
 
           const assistantMessage: Message = {
@@ -926,6 +944,9 @@ export function AssistantPanel({
           if (updatedFields.length > 0) {
             onFieldsUpdated?.(updatedFields);
           }
+
+          // Sync RAG service conversation history
+          syncRAGServiceHistory();
         } else if (data.type === "error") {
           console.error("Server error:", data.content);
           const errorMessages = {
@@ -979,6 +1000,26 @@ export function AssistantPanel({
         wsRef.current.send(`LANGUAGE:${selectedLanguage}`);
         console.log("Sent language to WebSocket:", selectedLanguage);
       }
+    }
+  };
+
+  // Function to send updated chat history to WebSocket
+  const sendChatHistoryToWebSocket = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN && messages.length > 0) {
+      const chatHistory = messages.map(msg => ({
+        type: msg.type,
+        content: msg.content
+      }));
+      const historyMessage = `CHAT_HISTORY:${JSON.stringify(chatHistory)}`;
+      wsRef.current.send(historyMessage);
+      console.log("Sent updated chat history to WebSocket:", chatHistory.length, "messages");
+    }
+  };
+
+  // Function to sync RAG service conversation history
+  const syncRAGServiceHistory = () => {
+    if (messages.length > 0) {
+      ragService.updateConversationHistory(messages);
     }
   };
 

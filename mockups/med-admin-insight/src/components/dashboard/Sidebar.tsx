@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { SimpleThemeToggle } from "@/components/ThemeToggle";
 import {
   LayoutDashboard,
   Users,
@@ -27,10 +28,10 @@ const SidebarItem = ({ icon, title, active, href }: SidebarItemProps) => {
     <Link
       to={href}
       className={cn(
-        "flex items-center gap-3 rounded-md px-3 py-2 hover:bg-medical-teal/30 transition-colors",
+        "flex items-center gap-3 rounded-md px-3 py-2 hover:bg-medical-teal/30 dark:hover:bg-medical-teal/20 transition-colors",
         active
-          ? "bg-medical-primary text-white hover:bg-medical-primary"
-          : "text-medical-text"
+          ? "bg-medical-primary text-white hover:bg-medical-primary dark:bg-medical-primary dark:text-white"
+          : "text-medical-text dark:text-gray-200"
       )}
     >
       <div className="text-xl">{icon}</div>
@@ -48,7 +49,7 @@ const SidebarSection = ({
 }) => {
   return (
     <div className="mb-6">
-      <h3 className="mb-2 px-3 text-xs uppercase text-medical-subtext">
+      <h3 className="mb-2 px-3 text-xs uppercase text-medical-subtext dark:text-gray-400">
         {title}
       </h3>
       <div className="space-y-1">{children}</div>
@@ -60,12 +61,15 @@ export function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="flex h-screen w-64 flex-col bg-white border-r border-gray-200 py-4 px-3">
-      <div className="flex items-center gap-2 px-3 py-2 mb-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-medical-primary text-white">
-          <PlusSquare className="h-5 w-5" />
+    <aside className="flex h-screen w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 py-4 px-3">
+      <div className="flex items-center justify-between px-3 py-2 mb-6">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-medical-primary text-white">
+            <PlusSquare className="h-5 w-5" />
+          </div>
+          <div className="font-semibold text-lg text-medical-text dark:text-white">Flora</div>
         </div>
-        <div className="font-semibold text-lg text-medical-text">Flora</div>
+        <SimpleThemeToggle />
       </div>
 
       <SidebarSection title="Form Management">

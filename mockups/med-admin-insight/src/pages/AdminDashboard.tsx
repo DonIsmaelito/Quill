@@ -52,7 +52,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-medical-background to-blue-50 dark:from-gray-900 dark:to-gray-800">
       <Sidebar />
 
       <div className="flex-1 overflow-y-auto">
@@ -60,10 +60,10 @@ export default function AdminDashboard() {
           {/* Top bar */}
           <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-8">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-medical-primary drop-shadow-sm leading-tight">
+              <h1 className="text-3xl md:text-4xl font-bold text-medical-primary dark:text-white drop-shadow-sm leading-tight">
                 Dashboard
               </h1>
-              <p className="text-medical-subtext text-base mt-1 leading-snug">
+              <p className="text-medical-subtext dark:text-gray-300 text-base mt-1 leading-snug">
                 Form Management Overview & Key Metrics
               </p>
             </div>
@@ -83,7 +83,7 @@ export default function AdminDashboard() {
               <Button
                 asChild
                 variant="outline"
-                className="border-medical-primary text-medical-primary hover:bg-medical-primary/10 flex items-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
+                className="border-medical-primary text-medical-primary hover:bg-medical-primary/10 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-400/10 flex items-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
               >
                 <Link to="/create-form">
                   <FilePlus className="h-4 w-4" />
@@ -93,7 +93,7 @@ export default function AdminDashboard() {
               <Button
                 asChild
                 variant="outline"
-                className="border-gray-300 text-gray-700 hover:bg-gray-100 flex items-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
+                className="border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
               >
                 <Link to="/templates">
                   <FileText className="h-4 w-4" />
@@ -113,19 +113,19 @@ export default function AdminDashboard() {
 
             {/* Form Status and Appointments - can be styled as distinct cards */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-              <div className="lg:col-span-1 bg-white p-4 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out flex flex-col min-h-[400px]">
+              <div className="lg:col-span-1 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out flex flex-col min-h-[400px]">
                 <ActionCenter
                   selectedMonthFilter={selectedMonthFilter}
                   onClearMonthFilter={clearMonthFilter}
                 />
               </div>
-              <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out min-h-[400px]">
+              <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out min-h-[400px]">
                 <AppointmentsTable appointments={appointmentsData} />
               </div>
             </div>
 
             {/* Recent Patients - can be styled as a distinct card */}
-            <div className="mb-6 bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out">
+            <div className="mb-6 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 ease-out">
               <PatientsTable patients={patientsData} />
             </div>
           </div>

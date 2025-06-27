@@ -41,15 +41,15 @@ const getFormIcon = (status: MissingForm["status"]) => {
   switch (status) {
     case "missing":
       return (
-        <FileWarning className="h-4 w-4 text-red-500 mr-1.5 flex-shrink-0" />
+        <FileWarning className="h-4 w-4 text-red-500 dark:text-red-400 mr-1.5 flex-shrink-0" />
       );
     case "pending":
       return (
-        <AlertCircle className="h-4 w-4 text-amber-500 mr-1.5 flex-shrink-0" />
+        <AlertCircle className="h-4 w-4 text-amber-500 dark:text-amber-400 mr-1.5 flex-shrink-0" />
       );
     case "completed":
       return (
-        <FileCheck className="h-4 w-4 text-green-500 mr-1.5 flex-shrink-0" />
+        <FileCheck className="h-4 w-4 text-green-500 dark:text-green-400 mr-1.5 flex-shrink-0" />
       );
     default:
       return null;
@@ -81,18 +81,18 @@ export const NextAppointmentCard: React.FC<NextAppointmentProps> = (props) => {
     <>
       <div
         className={cn(
-          "bg-white p-5 rounded-xl shadow-lg transition-all duration-300 ease-out mb-6",
+          "bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg transition-all duration-300 ease-out mb-6",
           isUrgent
-            ? "border-2 border-amber-400 shadow-amber-200/50 ring-4 ring-amber-100/50"
+            ? "border-2 border-amber-400 dark:border-amber-500 shadow-amber-200/50 dark:shadow-amber-500/20 ring-4 ring-amber-100/50 dark:ring-amber-500/20"
             : "hover:shadow-xl hover:-translate-y-0.5"
         )}
       >
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h3 className="text-lg font-semibold text-medical-primary">
+            <h3 className="text-lg font-semibold text-medical-primary dark:text-white">
               Next Appointment
             </h3>
-            <p className="text-sm text-medical-subtext">
+            <p className="text-sm text-medical-subtext dark:text-gray-400">
               {appointmentTime.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "short",
@@ -127,15 +127,15 @@ export const NextAppointmentCard: React.FC<NextAppointmentProps> = (props) => {
         </div>
 
         <div className="mb-4">
-          <h4 className="text-2xl font-bold text-gray-800">{patientName}</h4>
-          <p className="text-md text-gray-600">
+          <h4 className="text-2xl font-bold text-gray-800 dark:text-white">{patientName}</h4>
+          <p className="text-md text-gray-600 dark:text-gray-300">
             with {doctorName} - <span className="italic">{reason}</span>
           </p>
         </div>
 
         {missingForms.length > 0 && (
           <div className="mb-4">
-            <h5 className="text-sm font-medium text-gray-700 mb-1.5">
+            <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Required Forms:
             </h5>
             <ul className="space-y-1.5">
@@ -145,16 +145,16 @@ export const NextAppointmentCard: React.FC<NextAppointmentProps> = (props) => {
                   className={cn(
                     "text-sm flex items-center",
                     form.status === "completed"
-                      ? "text-green-600"
+                      ? "text-green-600 dark:text-green-400"
                       : form.status === "pending"
-                      ? "text-amber-600"
-                      : "text-red-600"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-red-600 dark:text-red-400"
                   )}
                 >
                   {getFormIcon(form.status)}
                   {form.name}
                   {form.status === "pending" && (
-                    <span className="text-xs ml-1 text-gray-500">(Sent)</span>
+                    <span className="text-xs ml-1 text-gray-500 dark:text-gray-400">(Sent)</span>
                   )}
                 </li>
               ))}
@@ -162,7 +162,7 @@ export const NextAppointmentCard: React.FC<NextAppointmentProps> = (props) => {
           </div>
         )}
 
-        <div className="flex items-center justify-start gap-2 pt-3 border-t border-gray-200/80 mt-3">
+        <div className="flex items-center justify-start gap-2 pt-3 border-t border-gray-200/80 dark:border-gray-600/80 mt-3">
           <Button variant="outline" size="sm" className="text-xs">
             <QrCode className="h-4 w-4 mr-1.5" /> Quick QR Print
           </Button>

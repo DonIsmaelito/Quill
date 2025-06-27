@@ -90,15 +90,15 @@ export const ActionCenter: React.FC<{
   return (
     <div className="h-full flex flex-col">
       <div className="flex justify-between items-center mb-3">
-        <h3 className="text-xl font-semibold text-medical-text">
+        <h3 className="text-xl font-semibold text-medical-text dark:text-white">
           Action Center
         </h3>
         {selectedMonthFilter && onClearMonthFilter && (
           <Button
             variant="outline"
-            size="xs"
+            size="sm"
             onClick={onClearMonthFilter}
-            className="text-xs"
+            className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Clear Month Filter ({selectedMonthFilter})
           </Button>
@@ -111,23 +111,23 @@ export const ActionCenter: React.FC<{
         }
         className="flex-grow flex flex-col"
       >
-        <TabsList className="grid w-full grid-cols-4 mb-4">
-          <TabsTrigger value="all">All ({getTabCount("all")})</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 mb-4 dark:bg-gray-700">
+          <TabsTrigger value="all" className="dark:text-gray-300 dark:data-[state=active]:bg-gray-600 dark:data-[state=active]:text-white">All ({getTabCount("all")})</TabsTrigger>
           <TabsTrigger
             value="overdue"
-            className="data-[state=active]:text-red-600 data-[state=active]:border-red-600"
+            className="data-[state=active]:text-red-600 data-[state=active]:border-red-600 dark:text-gray-300 dark:data-[state=active]:text-red-400 dark:data-[state=active]:border-red-400 dark:data-[state=active]:bg-gray-600"
           >
             🔴 Overdue ({getTabCount("overdue")})
           </TabsTrigger>
           <TabsTrigger
             value="waiting"
-            className="data-[state=active]:text-amber-600 data-[state=active]:border-amber-600"
+            className="data-[state=active]:text-amber-600 data-[state=active]:border-amber-600 dark:text-gray-300 dark:data-[state=active]:text-amber-400 dark:data-[state=active]:border-amber-400 dark:data-[state=active]:bg-gray-600"
           >
             🟠 Waiting ({getTabCount("waiting")})
           </TabsTrigger>
           <TabsTrigger
             value="ready"
-            className="data-[state=active]:text-green-600 data-[state=active]:border-green-600"
+            className="data-[state=active]:text-green-600 data-[state=active]:border-green-600 dark:text-gray-300 dark:data-[state=active]:text-green-400 dark:data-[state=active]:border-green-400 dark:data-[state=active]:bg-gray-600"
           >
             🟢 Ready ({getTabCount("ready")})
           </TabsTrigger>
@@ -149,7 +149,7 @@ export const ActionCenter: React.FC<{
                 />
               ))
             ) : (
-              <p className="text-center text-gray-500 py-8">
+              <p className="text-center text-gray-500 dark:text-gray-400 py-8">
                 {selectedMonthFilter
                   ? `No items for ${selectedMonthFilter} in this category.`
                   : "No items in this category."}

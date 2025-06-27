@@ -27,7 +27,7 @@ export function StatCard({
   icon,
   bgColor,
   textColor,
-  cardBgColor = "bg-white",
+  cardBgColor = "bg-white dark:bg-gray-800",
   cardTextColor,
   sparklineData,
 }: StatCardProps) {
@@ -35,25 +35,51 @@ export function StatCard({
 
   const contentTextColor = cardTextColor
     ? cardTextColor
-    : cardBgColor !== "bg-white"
+    : cardBgColor !== "bg-white dark:bg-gray-800"
     ? "text-white"
     : textColor;
   const subContentTextColor = cardTextColor
     ? cardTextColor
-    : cardBgColor !== "bg-white"
+    : cardBgColor !== "bg-white dark:bg-gray-800"
     ? "text-gray-200"
-    : "text-medical-subtext";
+    : "text-medical-subtext dark:text-gray-400";
   const changeTextColor = cardTextColor
     ? cardTextColor
     : isPositive
-    ? cardBgColor !== "bg-white"
+    ? cardBgColor !== "bg-white dark:bg-gray-800"
       ? "text-green-300"
-      : "text-green-600"
-    : cardBgColor !== "bg-white"
+      : "text-green-600 dark:text-green-400"
+    : cardBgColor !== "bg-white dark:bg-gray-800"
     ? "text-red-300"
-    : "text-red-600";
-  const sparklineStrokeColor =
-    cardBgColor !== "bg-white" ? "rgba(255,255,255,0.7)" : textColor;
+    : "text-red-600 dark:text-red-400";
+
+  // Extract color values for sparkline based on textColor
+  const getSparklineColor = () => {
+    if (cardBgColor !== "bg-white dark:bg-gray-800") {
+      return "rgba(255,255,255,0.7)";
+    }
+    
+    // Extract the base color from textColor (before dark:)
+    const baseColor = textColor.split(' ')[0];
+    switch (baseColor) {
+      case "text-sky-600":
+        return "#0284c7"; // sky-600
+      case "text-green-600":
+        return "#16a34a"; // green-600
+      case "text-yellow-600":
+        return "#ca8a04"; // yellow-600
+      case "text-purple-600":
+        return "#9333ea"; // purple-600
+      case "text-blue-600":
+        return "#2563eb"; // blue-600
+      case "text-red-600":
+        return "#dc2626"; // red-600
+      default:
+        return "#6b7280"; // gray-500 as fallback
+    }
+  };
+
+  const sparklineStrokeColor = getSparklineColor();
 
   return (
     <div
@@ -79,13 +105,13 @@ export function StatCard({
         <div
           className={cn(
             "p-3 rounded-lg",
-            cardBgColor !== "bg-white" ? "bg-white/20" : bgColor
+            cardBgColor !== "bg-white dark:bg-gray-800" ? "bg-white/20" : bgColor
           )}
         >
           {React.cloneElement(icon as React.ReactElement, {
             className: cn(
               "h-6 w-6",
-              cardBgColor !== "bg-white" ? "text-white" : textColor
+              cardBgColor !== "bg-white dark:bg-gray-800" ? "text-white" : textColor
             ),
           })}
         </div>

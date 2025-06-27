@@ -22,7 +22,7 @@ import { CheckCircle } from "lucide-react";
 type UserRole = "Admin" | "Physician" | "Front-Desk" | "Billing";
 
 interface RoleConfig {
-  icon: React.ReactNode;
+  icon: React.ReactElement;
   name: UserRole;
 }
 
@@ -49,7 +49,7 @@ export function UserProfile() {
       <Button
         variant="ghost"
         size="icon"
-        className="text-medical-subtext hover:text-medical-primary"
+        className="text-medical-subtext dark:text-gray-400 hover:text-medical-primary dark:hover:text-white"
       >
         <Bell className="h-5 w-5" />
       </Button>
@@ -58,26 +58,26 @@ export function UserProfile() {
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-100/80 transition-colors"
+            className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-100/80 dark:hover:bg-gray-700/80 transition-colors"
           >
             <Avatar className="h-8 w-8">
               <AvatarImage src="/avatars/01.png" />
               <AvatarFallback>{currentUserName.substring(0, 1)}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col items-start text-sm">
-              <span className="font-medium text-medical-text leading-tight">
+              <span className="font-medium text-medical-text dark:text-white leading-tight">
                 {currentUserName}
               </span>
               <div className="flex items-center">
-                {React.cloneElement(activeRoleConfig.icon, {
-                  className: "h-3.5 w-3.5 text-medical-subtext mr-1",
+                {activeRoleConfig && React.cloneElement(activeRoleConfig.icon, {
+                  className: "h-3.5 w-3.5 text-medical-subtext dark:text-gray-400 mr-1",
                 })}
-                <span className="text-xs text-medical-subtext leading-tight">
+                <span className="text-xs text-medical-subtext dark:text-gray-400 leading-tight">
                   {currentRole}
                 </span>
               </div>
             </div>
-            <ChevronDown className="h-4 w-4 text-medical-subtext ml-1" />
+            <ChevronDown className="h-4 w-4 text-medical-subtext dark:text-gray-400 ml-1" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
@@ -90,7 +90,7 @@ export function UserProfile() {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuLabel className="text-xs font-normal text-gray-500 px-2 py-1">
+            <DropdownMenuLabel className="text-xs font-normal text-gray-500 dark:text-gray-400 px-2 py-1">
               Switch Role
             </DropdownMenuLabel>
             {roles.map((role) => (
@@ -105,13 +105,13 @@ export function UserProfile() {
                 })}
                 {role.name}
                 {currentRole === role.name && (
-                  <CheckCircle className="h-4 w-4 ml-auto text-medical-primary" />
+                  <CheckCircle className="h-4 w-4 ml-auto text-medical-primary dark:text-blue-400" />
                 )}
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="text-red-500 hover:!text-red-600 hover:!bg-red-50">
+          <DropdownMenuItem className="text-red-500 dark:text-red-400 hover:!text-red-600 dark:hover:!text-red-300 hover:!bg-red-50 dark:hover:!bg-red-900/20">
             Log out
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -25,24 +25,24 @@ export interface ActionItemProps {
 
 const statusConfig = {
   overdue: {
-    icon: <AlertOctagon className="h-5 w-5 text-red-500" />,
-    color: "text-red-600",
-    bgColor: "bg-red-50",
-    borderColor: "border-red-500",
+    icon: <AlertOctagon className="h-5 w-5 text-red-500 dark:text-red-400" />,
+    color: "text-red-600 dark:text-red-400",
+    bgColor: "bg-red-50 dark:bg-red-900/20",
+    borderColor: "border-red-500 dark:border-red-400",
     ctaLabel: "Address Now", // Or specific actions
   },
   waiting: {
-    icon: <Bell className="h-5 w-5 text-amber-500" />,
-    color: "text-amber-600",
-    bgColor: "bg-amber-50",
-    borderColor: "border-amber-500",
+    icon: <Bell className="h-5 w-5 text-amber-500 dark:text-amber-400" />,
+    color: "text-amber-600 dark:text-amber-400",
+    bgColor: "bg-amber-50 dark:bg-amber-900/20",
+    borderColor: "border-amber-500 dark:border-amber-400",
     ctaLabel: "Remind Patient",
   },
   ready: {
-    icon: <CheckCircle className="h-5 w-5 text-green-500" />,
-    color: "text-green-600",
-    bgColor: "bg-green-50",
-    borderColor: "border-green-500",
+    icon: <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" />,
+    color: "text-green-600 dark:text-green-400",
+    bgColor: "bg-green-50 dark:bg-green-900/20",
+    borderColor: "border-green-500 dark:border-green-400",
     ctaLabel: "Mark Complete", // Or Archive
   },
 };
@@ -63,7 +63,7 @@ export const ActionItem: React.FC<ActionItemProps> = ({
   return (
     <div
       className={cn(
-        "p-4 rounded-lg border-l-4 flex items-center justify-between transition-all hover:shadow-md",
+        "p-4 rounded-lg border-l-4 flex items-center justify-between transition-all hover:shadow-md dark:hover:shadow-lg dark:hover:shadow-black/20",
         config.bgColor,
         config.borderColor
       )}
@@ -72,7 +72,7 @@ export const ActionItem: React.FC<ActionItemProps> = ({
         <div className="mr-3 flex-shrink-0">{config.icon}</div>
         <div>
           <h4 className={cn("font-semibold", config.color)}>{title}</h4>
-          <p className="text-sm text-gray-600">{patientName}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">{patientName}</p>
           {dueDate && (
             <p className={cn("text-xs mt-0.5", config.color, "font-medium")}>
               {dueDate}
@@ -86,7 +86,7 @@ export const ActionItem: React.FC<ActionItemProps> = ({
             variant="outline"
             size="sm"
             onClick={() => onRemind(id)}
-            className="text-xs"
+            className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             <Bell className="h-3 w-3 mr-1.5" /> Remind
           </Button>
@@ -96,7 +96,7 @@ export const ActionItem: React.FC<ActionItemProps> = ({
             variant="outline"
             size="sm"
             onClick={() => onMarkComplete(id)}
-            className="text-xs"
+            className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             <CheckCircle className="h-3 w-3 mr-1.5" /> Mark Complete
           </Button>
@@ -106,7 +106,7 @@ export const ActionItem: React.FC<ActionItemProps> = ({
             variant="ghost"
             size="sm"
             onClick={() => onArchive(id)}
-            className="text-xs text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
           >
             Archive
           </Button>
