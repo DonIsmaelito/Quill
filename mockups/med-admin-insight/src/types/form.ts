@@ -1,6 +1,6 @@
 export interface FormField {
   id: string;
-  type: "text" | "checkbox" | "radio" | "select" | "date" | "signature" | "table";
+  type: "text" | "checkbox" | "radio" | "select" | "date" | "signature" | "table" | "header" | "subheader";
   label: string;
   required: boolean;
   value?: string | boolean;

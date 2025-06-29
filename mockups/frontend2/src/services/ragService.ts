@@ -192,11 +192,17 @@ class RAGService {
     language?: string
   ): Promise<string> {
     try {
+      console.log("RAGService: Processing message with", formFields?.length || 0, "form fields");
+      if (formFields && formFields.length > 0) {
+        console.log("RAGService: Current form fields:", formFields.map(f => ({ id: f.id, label: f.label })));
+      }
+
       // First, check if this is a question about form fields
-      const formFieldQuestion = this.isFormFieldQuestion(message);
+      // Use the current formFields parameter instead of internal state
+      const formFieldQuestion = this.isFormFieldQuestion(message, formFields);
       let additionalFieldContext = "";
       if (formFieldQuestion) {
-        additionalFieldContext = this.getFormFieldContext(formFieldQuestion);
+        additionalFieldContext = this.getFormFieldContext(formFieldQuestion, formFields);
       }
 
       // If this.documents is not empty, this.loadDocuments() will be called
@@ -223,6 +229,7 @@ class RAGService {
         }));
 
         formData.append("formFields", JSON.stringify(updatedFormFields));
+        console.log("RAGService: Sending form fields to backend:", updatedFormFields.length, "fields");
       }
 
       // Add language parameter if provided
@@ -247,17 +254,25 @@ class RAGService {
   }
 
   private isFormFieldQuestion(
-    message: string
+    message: string,
+    formFields?: FormFieldValue[]
   ): { fieldId: string; question: string } | null {
     const lowerMessage = message.toLowerCase();
 
+    // Use current form fields if provided, otherwise fall back to internal state
+    const fieldsToCheck = formFields || this.formFieldValues;
+    
+    console.log("RAGService: Checking form field question against", fieldsToCheck.length, "fields");
+    console.log("RAGService: Message to check:", message);
+
     // Check for questions about specific fields
-    for (const field of this.formFieldValues) {
+    for (const field of fieldsToCheck) {
       const fieldName = field.label.toLowerCase();
       if (
         lowerMessage.includes(fieldName) ||
         lowerMessage.includes(field.id.toLowerCase())
       ) {
+        console.log("RAGService: Found matching field:", field.label, "for message:", message);
         return {
           fieldId: field.id,
           question: message,
@@ -265,6 +280,7 @@ class RAGService {
       }
     }
 
+    console.log("RAGService: No matching form fields found for message:", message);
     return null;
   }
 
@@ -272,8 +288,8 @@ class RAGService {
   private getFormFieldContext(fieldQuestion: {
     fieldId: string;
     question: string;
-  }): string {
-    //     const field = this.formFieldValues.find(f => f.id === fieldQuestion.fieldId);
+  }, formFields?: FormFieldValue[]): string {
+    //     const field = (formFields || this.formFieldValues).find(f => f.id === fieldQuestion.fieldId);
     //     if (!field) return "I'm not sure which field you're asking about. Could you please specify?";
 
     //     const fieldInfo = this.getFieldInformation(field);
@@ -409,6 +425,7 @@ class RAGService {
 
       await this.callApi("rag", "POST", formData);
       this.formFieldValues = values;
+      console.log("RAGService: Updated internal form field values:", values.length, "fields");
     } catch (error) {
       console.error("Error updating form field values:", error);
       throw error;

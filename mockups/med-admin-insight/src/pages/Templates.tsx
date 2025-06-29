@@ -12,6 +12,8 @@ import {
   Shield,
   UserCircle,
   Clock,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/dashboard/Sidebar";
@@ -141,6 +143,54 @@ export default function Templates() {
   const [isEditingFormName, setIsEditingFormName] = useState(false);
   const [editingFormName, setEditingFormName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isPdfViewerCollapsed, setIsPdfViewerCollapsed] = useState(false);
+  const [pdfLoadError, setPdfLoadError] = useState(false);
+  const pdfLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper function to validate PDF URL and handle loading
+  const validatePdfUrl = async (url: string): Promise<boolean> => {
+    if (!url) return false;
+    
+    try {
+      // Clear any existing timeout
+      if (pdfLoadTimeoutRef.current) {
+        clearTimeout(pdfLoadTimeoutRef.current);
+      }
+      
+      // Set a timeout for PDF loading
+      return new Promise((resolve) => {
+        pdfLoadTimeoutRef.current = setTimeout(() => {
+          setPdfLoadError(true);
+          resolve(false);
+        }, 10000); // 10 second timeout
+        
+        // Test if the URL is accessible
+        fetch(url, { method: 'HEAD' })
+          .then(response => {
+            if (pdfLoadTimeoutRef.current) {
+              clearTimeout(pdfLoadTimeoutRef.current);
+            }
+            if (response.ok) {
+              setPdfLoadError(false);
+              resolve(true);
+            } else {
+              setPdfLoadError(true);
+              resolve(false);
+            }
+          })
+          .catch(() => {
+            if (pdfLoadTimeoutRef.current) {
+              clearTimeout(pdfLoadTimeoutRef.current);
+            }
+            setPdfLoadError(true);
+            resolve(false);
+          });
+      });
+    } catch (error) {
+      setPdfLoadError(true);
+      return false;
+    }
+  };
 
   // Helper function to save uploaded template to form-templates folder
   const saveUploadedTemplateToFile = async (template: TemplateData, fields: FormField[]) => {
@@ -460,13 +510,27 @@ export default function Templates() {
       }
     };
     loadTemplates();
+    
+    // Cleanup function to clear any pending timeouts
+    return () => {
+      if (pdfLoadTimeoutRef.current) {
+        clearTimeout(pdfLoadTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleUseTemplate = async (template: TemplateData) => {
-    setSelectedPdfUrl(template.pdfUrl);
+    setSelectedPdfUrl(template.pdfUrl || null);
     setSelectedTemplateId(template.id);
     setIsInPreviewMode(true);
     setEditingFormName(template.name); // Set initial form name for editing
+    setIsPdfViewerCollapsed(false); // Reset PDF viewer state
+    setPdfLoadError(false); // Reset PDF load error state
+    
+    // Validate PDF URL if it exists
+    if (template.pdfUrl) {
+      await validatePdfUrl(template.pdfUrl);
+    }
     
     // Don't reload templates here as it can cause the preview to disappear
     // The template data in state should be sufficient
@@ -578,11 +642,19 @@ export default function Templates() {
   };
 
   const handleBackToTemplates = () => {
+    // Clear any pending PDF load timeout
+    if (pdfLoadTimeoutRef.current) {
+      clearTimeout(pdfLoadTimeoutRef.current);
+      pdfLoadTimeoutRef.current = null;
+    }
+    
     setSelectedPdfUrl(null);
     setSelectedTemplateId(null);
     setIsInPreviewMode(false);
     setIsEditingFormName(false);
     setEditingFormName("");
+    setIsPdfViewerCollapsed(false);
+    setPdfLoadError(false);
   };
 
   const handleProceed = () => {
@@ -649,7 +721,12 @@ export default function Templates() {
       setSelectedTemplateId(newTemplate.id);
       setIsInPreviewMode(true);
       setEditingFormName(fileNameWithoutExtension); // Set initial form name for uploaded templates
+      setIsPdfViewerCollapsed(false); // Reset PDF viewer state
+      setPdfLoadError(false); // Reset PDF load error state
       setIsProcessing(true);
+
+      // Validate the object URL (should always work for local files)
+      await validatePdfUrl(objectUrl);
 
       try {
         // Process document using ragService
@@ -765,7 +842,7 @@ export default function Templates() {
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 md:p-8">
-          {isInPreviewMode && selectedPdfUrl ? (
+          {isInPreviewMode ? (
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
               <Button
                 variant="outline"
@@ -837,19 +914,42 @@ export default function Templates() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Original PDF View */}
-                <div className="aspect-[8.5/11] w-full border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden shadow-md">
-                  <iframe
-                    src={selectedPdfUrl}
-                    title="Original Template"
-                    width="100%"
-                    height="100%"
-                    className="border-0"
-                  />
-                </div>
-                {/* Digitized Form View */}
-                <div className="aspect-[8.5/11] w-full border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden shadow-md bg-white dark:bg-gray-800">
+              <div className={cn(
+                "grid gap-6 transition-all duration-300 ease-in-out",
+                selectedPdfUrl && !isPdfViewerCollapsed && !pdfLoadError
+                  ? "grid-cols-1 md:grid-cols-2" 
+                  : "grid-cols-1"
+              )}>
+                {/* Left Column: PDF Viewer or Error Message */}
+                {selectedPdfUrl && !isPdfViewerCollapsed && !pdfLoadError && (
+                  <div className="aspect-[8.5/11] w-full border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden shadow-md relative">
+                    <iframe
+                      src={selectedPdfUrl}
+                      title="Original Template"
+                      width="100%"
+                      height="100%"
+                      className="border-0"
+                      onError={() => setPdfLoadError(true)}
+                      onLoad={() => setPdfLoadError(false)}
+                    />
+                    {/* Collapse Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="absolute top-2 right-2 bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 border-gray-300 dark:border-gray-600 shadow-md"
+                      onClick={() => setIsPdfViewerCollapsed(true)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Right Column: Digitized Form View */}
+                <div className={cn(
+                  "aspect-[8.5/11] w-full border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden shadow-md bg-white dark:bg-gray-800 relative",
+                  // Add max-width when displayed alone (single column layout)
+                  (selectedPdfUrl && !isPdfViewerCollapsed && !pdfLoadError) ? "" : "max-w-4xl mx-auto"
+                )}>
                   {isProcessing ? (
                     <div className="flex items-center justify-center h-full">
                       <div className="text-center">
@@ -923,6 +1023,18 @@ export default function Templates() {
                         }
                       }}
                     />
+                  )}
+                  
+                  {/* Expand PDF Button - Only show when PDF viewer is collapsed */}
+                  {selectedPdfUrl && isPdfViewerCollapsed && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="absolute top-2 right-2 bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 border-gray-300 dark:border-gray-600 shadow-md"
+                      onClick={() => setIsPdfViewerCollapsed(false)}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
               </div>

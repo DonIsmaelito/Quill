@@ -61,10 +61,10 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
     <Button
       variant="ghost"
       size="icon"
-      className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white rounded-full shadow-sm"
+      className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full shadow-sm"
       onClick={() => onDeleteField?.(fieldId)}
     >
-      <X className="h-4 w-4 text-gray-500 hover:text-red-500" />
+      <X className="h-4 w-4 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400" />
     </Button>
   );
 
@@ -72,7 +72,7 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
     <Button
       variant="ghost"
       size="icon"
-      className="absolute top-1 right-8 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white rounded-full shadow-sm"
+      className="absolute top-1 right-8 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full shadow-sm"
       onClick={() => {
         setEditingField(field);
         setFieldConfig({
@@ -86,26 +86,26 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
         setShowEditModal(true);
       }}
     >
-      <Edit2 className="h-4 w-4 text-gray-500 hover:text-medical-primary" />
+      <Edit2 className="h-4 w-4 text-gray-500 dark:text-gray-400 hover:text-medical-primary dark:hover:text-blue-400" />
     </Button>
   );
 
   const InsertButton = ({ index }: { index: number }) => (
     <div className="relative h-2 group">
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="h-px w-full bg-transparent group-hover:bg-gray-200 transition-colors"></div>
+        <div className="h-px w-full bg-transparent group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors"></div>
       </div>
       <div className="absolute inset-0 flex items-center justify-center">
         <Button
           variant="ghost"
           size="icon"
-          className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity bg-white hover:bg-gray-50 rounded-full shadow-sm border border-gray-200"
+          className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-full shadow-sm border border-gray-200 dark:border-gray-600"
           onClick={() => {
             setInsertIndex(index);
             setShowConfigModal(true);
           }}
         >
-          <Plus className="h-3 w-3 text-gray-400" />
+          <Plus className="h-3 w-3 text-gray-400 dark:text-gray-500" />
         </Button>
       </div>
     </div>
@@ -116,7 +116,7 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
 
     const newField: FormField = {
       id: `${selectedFieldType}-${Date.now()}`,
-      type: selectedFieldType === "header" || selectedFieldType === "subheader" ? "text" : selectedFieldType,
+      type: selectedFieldType,
       label: fieldConfig.label,
       required: fieldConfig.required,
       placeholder: fieldConfig.placeholder,
@@ -166,30 +166,6 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
   };
 
   const renderField = (field: FormField) => {
-    // Check if this is a header field (based on width and height)
-    const isHeader = field.position.width === 600 && (field.position.height === 48 || field.position.height === 36);
-    const isSubheader = field.position.height === 36;
-
-    if (isHeader) {
-      const headerElement = (
-        <div key={field.id} className={`${isSubheader ? 'mt-8' : 'mt-12'} mb-6 relative group`}>
-          {!isSubheader && !isFirstHeader && <hr className="border-medical-primary/20 mb-6" />}
-          <h2 className={`font-semibold ${isSubheader ? 'text-lg text-gray-700' : 'text-2xl text-medical-primary'}`}>
-            {field.label}
-          </h2>
-          {isSubheader && <hr className="border-medical-primary/10 mt-2" />}
-          <EditButton field={field} />
-          <DeleteButton fieldId={field.id} />
-        </div>
-      );
-      
-      if (!isSubheader) {
-        isFirstHeader = false;
-      }
-      
-      return headerElement;
-    }
-
     // Check if this is a table field (based on width and height)
     const isTable = field.type === "table" || (field.position.width === 600 && field.position.height === 200);
     if (isTable) {
@@ -197,17 +173,17 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
         const tableFields: TableField[] = JSON.parse(field.value as string);
         return (
           <div key={field.id} className="mb-6 relative group">
-            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-2">
+            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
             </Label>
-            <div className="border border-medical-primary/20 rounded-lg overflow-hidden shadow-sm">
+            <div className="border border-medical-primary/20 dark:border-blue-400/20 rounded-lg overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       {tableFields.map((col) => (
-                        <TableHead key={col.id} className="bg-medical-primary/5 text-medical-primary font-medium text-center whitespace-nowrap">
+                        <TableHead key={col.id} className="bg-medical-primary/5 dark:bg-blue-400/10 text-medical-primary dark:text-blue-400 font-medium text-center whitespace-nowrap">
                           {col.label}
                         </TableHead>
                       ))}
@@ -216,7 +192,7 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
                   <TableBody>
                     <TableRow>
                       {tableFields.map((col) => (
-                        <TableCell key={col.id} className="bg-white whitespace-nowrap">
+                        <TableCell key={col.id} className="bg-white dark:bg-gray-800 whitespace-nowrap">
                           {col.type === "checkbox" ? (
                             <div className="flex justify-center">
                               <Checkbox 
@@ -230,7 +206,7 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
                                     value: JSON.stringify(updatedFields)
                                   });
                                 }}
-                                className="border-medical-primary/30"
+                                className="border-medical-primary/30 dark:border-blue-400/30"
                               />
                             </div>
                           ) : col.type === "date" ? (
@@ -246,7 +222,7 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
                                   value: JSON.stringify(updatedFields)
                                 });
                               }}
-                              className="w-full border-medical-primary/20 focus:border-medical-primary/40"
+                              className="w-full border-medical-primary/20 dark:border-blue-400/20 focus:border-medical-primary/40 dark:focus:border-blue-400/40"
                             />
                           ) : (
                             <Input 
@@ -261,7 +237,7 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
                                   value: JSON.stringify(updatedFields)
                                 });
                               }}
-                              className="w-full border-medical-primary/20 focus:border-medical-primary/40"
+                              className="w-full border-medical-primary/20 dark:border-blue-400/20 focus:border-medical-primary/40 dark:focus:border-blue-400/40"
                             />
                           )}
                         </TableCell>
@@ -282,19 +258,44 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
     }
 
     switch (field.type) {
+      case "header":
+        const headerElement = (
+          <div key={field.id} className="mt-12 mb-6 relative group">
+            {!isFirstHeader && <hr className="border-medical-primary/20 dark:border-blue-400/20 mb-6" />}
+            <h2 className="text-2xl text-medical-primary dark:text-blue-400 font-semibold">
+              {field.label}
+            </h2>
+            <EditButton field={field} />
+            <DeleteButton fieldId={field.id} />
+          </div>
+        );
+        
+        isFirstHeader = false;
+        return headerElement;
+      case "subheader":
+        return (
+          <div key={field.id} className="mt-8 mb-6 relative group">
+            <h3 className="text-lg text-gray-700 dark:text-gray-300 font-semibold">
+              {field.label}
+            </h3>
+            <hr className="border-medical-primary/10 dark:border-blue-400/10 mt-2" />
+            <EditButton field={field} />
+            <DeleteButton fieldId={field.id} />
+          </div>
+        );
       case "text":
         return (
           <div key={field.id} className="mb-4 relative group">
-            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
             </Label>
             <Input
               id={field.id}
               type="text"
               placeholder={field.placeholder}
               required={field.required}
-              className="w-full border-medical-primary/20 focus:border-medical-primary/40"
+              className="w-full border-medical-primary/20 dark:border-blue-400/20 focus:border-medical-primary/40 dark:focus:border-blue-400/40"
               defaultValue={field.value as string}
             />
             <EditButton field={field} />
@@ -304,10 +305,10 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
       case "checkbox":
         return (
           <div key={field.id} className="flex items-center space-x-2 mb-4 relative group">
-            <Checkbox id={field.id} required={field.required} defaultChecked={field.value as boolean} className="border-medical-primary/30" />
-            <Label htmlFor={field.id} className="text-sm font-medium text-gray-700">
+            <Checkbox id={field.id} required={field.required} defaultChecked={field.value as boolean} className="border-medical-primary/30 dark:border-blue-400/30" />
+            <Label htmlFor={field.id} className="text-sm font-medium text-gray-700 dark:text-gray-300">
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
             </Label>
             <EditButton field={field} />
             <DeleteButton fieldId={field.id} />
@@ -316,15 +317,15 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
       case "radio":
         return (
           <div key={field.id} className="mb-4 relative group">
-            <Label className="block text-sm font-medium text-gray-700 mb-2">
+            <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
             </Label>
             <RadioGroup required={field.required} defaultValue={field.value as string}>
               {field.options?.map((option) => (
                 <div key={option} className="flex items-center space-x-2">
-                  <RadioGroupItem value={option} id={`${field.id}-${option}`} className="border-medical-primary/30" />
-                  <Label htmlFor={`${field.id}-${option}`} className="text-sm text-gray-700">
+                  <RadioGroupItem value={option} id={`${field.id}-${option}`} className="border-medical-primary/30 dark:border-blue-400/30" />
+                  <Label htmlFor={`${field.id}-${option}`} className="text-sm text-gray-700 dark:text-gray-300">
                     {option}
                   </Label>
                 </div>
@@ -337,12 +338,12 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
       case "select":
         return (
           <div key={field.id} className="mb-4 relative group">
-            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
             </Label>
             <Select required={field.required} defaultValue={field.value as string}>
-              <SelectTrigger className="w-full border-medical-primary/20 focus:border-medical-primary/40">
+              <SelectTrigger className="w-full border-medical-primary/20 dark:border-blue-400/20 focus:border-medical-primary/40 dark:focus:border-blue-400/40">
                 <SelectValue placeholder={field.placeholder || "Select an option"} />
               </SelectTrigger>
               <SelectContent>
@@ -360,15 +361,15 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
       case "date":
         return (
           <div key={field.id} className="mb-4 relative group">
-            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
             </Label>
             <Input
               id={field.id}
               type="date"
               required={field.required}
-              className="w-full border-medical-primary/20 focus:border-medical-primary/40"
+              className="w-full border-medical-primary/20 dark:border-blue-400/20 focus:border-medical-primary/40 dark:focus:border-blue-400/40"
               defaultValue={field.value as string}
             />
             <EditButton field={field} />
@@ -378,12 +379,12 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
       case "signature":
         return (
           <div key={field.id} className="mb-4 relative group">
-            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+            <Label htmlFor={field.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {field.required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
             </Label>
-            <div className="border-2 border-dashed border-medical-primary/20 rounded-lg p-4 text-center cursor-pointer hover:border-medical-primary/40 transition-colors">
-              <p className="text-sm text-gray-500">Click to sign</p>
+            <div className="border-2 border-dashed border-medical-primary/20 dark:border-blue-400/20 rounded-lg p-4 text-center cursor-pointer hover:border-medical-primary/40 dark:hover:border-blue-400/40 transition-colors">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Click to sign</p>
             </div>
             <EditButton field={field} />
             <DeleteButton fieldId={field.id} />
@@ -395,12 +396,14 @@ export function DigitizedForm({ fields, onDeleteField, onAddField, onEditField }
   };
 
   return (
-    <div className="p-6 overflow-y-auto h-full bg-white rounded-lg shadow-sm">
+    <div className="p-6 overflow-y-auto h-full bg-white dark:bg-gray-800 rounded-lg shadow-sm">
       <form className="space-y-4">
         {fields.map((field, index) => (
           <React.Fragment key={field.id}>
             {renderField(field)}
-            <InsertButton index={index + 1} />
+            {onAddField && (
+              <InsertButton index={index + 1} />
+            )}
           </React.Fragment>
         ))}
       </form>

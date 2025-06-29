@@ -68,8 +68,42 @@ export function AssistantPanel({
   // Create a ref to track form values for stable comparisons
   const formValuesRef = useRef<Record<string, any>>({});
 
-  // Keep ref in sync with props
+  // Debug logging for form fields changes
   useEffect(() => {
+    console.log("AssistantPanel - Form fields prop changed:", formFields.length, "fields");
+    console.log("AssistantPanel - Form fields details:", formFields.map(f => ({ id: f.id, label: f.label })));
+  }, [formFields]);
+
+  // Debug logging for form values changes
+  useEffect(() => {
+    console.log("AssistantPanel - Form values prop changed:", Object.keys(formValues).length, "values");
+    console.log("AssistantPanel - Form values details:", formValues);
+  }, [formValues]);
+
+  // Reset messages and formValuesRef when formFields changes
+  useEffect(() => {
+    console.log("AssistantPanel - Resetting messages due to formFields/formTitle change");
+    const welcomeMessage = generateWelcomeMessage(formTitle, formFields, selectedLanguage);
+    setMessages([
+      {
+        id: "1",
+        content: welcomeMessage,
+        type: "assistant",
+        timestamp: new Date(),
+      },
+    ]);
+    ragService.setWelcomeMessage(welcomeMessage);
+    // Reset formValuesRef to match the new fields
+    formValuesRef.current = {};
+    formFields.forEach((field) => {
+      formValuesRef.current[field.id] =
+        formValues[field.id] || field.value || "";
+    });
+  }, [formFields, formTitle]);
+
+  // Update formValuesRef when formValues change (without resetting messages)
+  useEffect(() => {
+    console.log("AssistantPanel - Updating formValuesRef (preserving messages)");
     formValuesRef.current = formValues;
   }, [formValues]);
 
@@ -116,26 +150,6 @@ export function AssistantPanel({
     setMessages((prev) => [...prev, newMessage]);
   };
 
-  // Reset messages and formValuesRef when formFields changes
-  useEffect(() => {
-    const welcomeMessage = generateWelcomeMessage(formTitle, formFields, selectedLanguage);
-    setMessages([
-      {
-        id: "1",
-        content: welcomeMessage,
-        type: "assistant",
-        timestamp: new Date(),
-      },
-    ]);
-    ragService.setWelcomeMessage(welcomeMessage);
-    // Reset formValuesRef to match the new fields
-    formValuesRef.current = {};
-    formFields.forEach((field) => {
-      formValuesRef.current[field.id] =
-        formValues[field.id] || field.value || "";
-    });
-  }, [formFields, formTitle]);
-
   // Update form fields reference when they change
   useEffect(() => {
     if (formFields.length > 0) {
@@ -146,12 +160,29 @@ export function AssistantPanel({
         value: formValuesRef.current[field.id] || "MISSING",
       }));
 
+      // Update the RAG service with the new form fields
+      ragService.updateFormFieldValues(currentFormFields);
+
       // Send updated form fields to WebSocket if connected
       sendFormFieldsToWebSocket();
 
       console.log("AssistantPanel: Form fields updated:", currentFormFields);
     }
   }, [formFields]);
+
+  // Update RAG service when form values change
+  useEffect(() => {
+    if (formFields.length > 0) {
+      const currentFormFields = formFields.map((field) => ({
+        id: field.id,
+        label: field.label,
+        value: formValues[field.id] || "MISSING",
+      }));
+
+      // Update the RAG service with the current form values
+      ragService.updateFormFieldValues(currentFormFields);
+    }
+  }, [formValues, formFields]);
 
   // DISABLED: Auto-fill form on initial load (per user request to remove "refresh autofill" feature)
   /*
@@ -373,6 +404,10 @@ export function AssistantPanel({
         value: formValues[field.id] || "",
       }));
 
+      console.log("handleSendMessage - Current form fields:", currentFormFields);
+      console.log("handleSendMessage - Form values from props:", formValues);
+      console.log("handleSendMessage - Form fields from props:", formFields.map(f => ({ id: f.id, label: f.label })));
+
       // Add user message to UI
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -411,6 +446,8 @@ export function AssistantPanel({
           const fieldUpdatesString = fieldUpdatesMatch[0].replace(/'/g, '"');
           const updatesObj = JSON.parse(fieldUpdatesString);
           updatedFields = updatesObj.field_updates || [];
+          console.log("Raw field updates from JSON:", updatesObj.field_updates);
+          console.log("Parsed updatedFields:", updatedFields);
           displayResponse = displayResponse
             .replace(fieldUpdatesMatch[0], "")
             .trim();
@@ -577,13 +614,9 @@ export function AssistantPanel({
           const fieldUpdatesString = fieldUpdatesMatch[0].replace(/'/g, '"');
           const updatesObj = JSON.parse(fieldUpdatesString);
           updatedFields = updatesObj.field_updates || [];
-          console.log("Field updates:", updatedFields);
-          // Remove the field updates from the response
+          console.log("File upload - Raw field updates from JSON:", updatesObj.field_updates);
+          console.log("File upload - Parsed updatedFields:", updatedFields);
           displayResponse = response.replace(fieldUpdatesMatch[0], "").trim();
-          console.log(
-            "Display response after removing fields:",
-            displayResponse
-          );
         } catch (error) {
           console.error("Error parsing field updates:", error);
         }
