@@ -5,14 +5,10 @@ import { Card } from "@/components/ui/card";
 import FormReview from "./FormReview";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
-// Import the DigitizedForm component from med-admin-insight
-import { DigitizedForm } from "../../../med-admin-insight/src/components/DigitizedForm";
-// Import the processFormData function from med-admin-insight
-import { processFormData } from "../../../med-admin-insight/src/utils/formProcessing";
+import { processFormData } from "../utils/formProcessing";
 // Import the FormSuccessScreen component
 import FormSuccessScreen from "./FormSuccessScreen";
 
-// Import the FormField type from med-admin-insight
 interface FormField {
   id: string;
   type:

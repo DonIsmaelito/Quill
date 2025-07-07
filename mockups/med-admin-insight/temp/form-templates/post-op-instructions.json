@@ -1,13 +1,19 @@
 {
-    "id": "post-op-instructions",
-    "name": "Post-Operative Instructions",
-    "category": "Clinical",
-    "uses": 75,
-    "pdfUrl": "Patient_Intake_Form.pdf",
-    "description": "Detailed instructions for patients after undergoing a surgical procedure.",
-    "tags": ["post-op", "instructions", "aftercare"],
-    "version": 2,
-    "lastEditedBy": { "name": "Dr. Smith", "avatarUrl": "/avatars/03.png" },
-    "lastEditedOn": "2023-10-20T14:30:00Z",
-    "fields": "[]"
+  "id": "post-op-instructions",
+  "name": "Post-Operative Instructions",
+  "category": "Clinical",
+  "uses": 75,
+  "pdfUrl": "Patient_Intake_Form.pdf",
+  "description": "Detailed instructions for patients after undergoing a surgical procedure.",
+  "tags": [
+    "post-op",
+    "instructions",
+    "aftercare"
+  ],
+  "version": 2,
+  "lastEditedBy": {
+    "name": "Current User"
+  },
+  "lastEditedOn": "2025-06-29T15:41:38.865Z",
+  "fields": "[\n  {\n    \"id\": \"form-header\",\n    \"type\": \"text\",\n    \"label\": \"Post-Operative Instructions\",\n    \"required\": false,\n    \"value\": \"\",\n    \"position\": {\n      \"x\": 0,\n      \"y\": 0,\n      \"width\": 600,\n      \"height\": 48\n    }\n  }\n]"
 }

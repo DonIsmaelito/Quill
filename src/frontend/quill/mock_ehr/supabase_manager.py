@@ -155,7 +155,7 @@ class SupabaseManager:
             logger.error(f"Error creating observation period: {str(e)}")
     
     def update_or_append_field(self, table_name: str, person_id: int, field_name: str, 
-                              new_value: Any, identifier_field: str = None) -> bool:
+                              new_value: Any, identifier_field: str | None = None) -> bool:
         """
         Update or append to a field in a table.
         If value exists and is different, append with comma.

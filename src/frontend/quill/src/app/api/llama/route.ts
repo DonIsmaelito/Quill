@@ -29,7 +29,7 @@ async function saveUploadedFile(file: Buffer, fileName: string): Promise<string>
 
 async function runPythonScript(scriptPath: string, args: string[]) {
   const isWindows = os.platform() === 'win32';
-  const condaEnv = 'quill';
+  // const condaEnv = 'quill';
   const quotedArgs = args.map(arg => {
     if (arg.includes(' ') || arg.includes('"') || arg.includes("'") || arg.includes('{')) {
       const escapedArg = arg.replace(/"/g, '\\"');
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ error: 'Invalid mode' }, { status: 400 });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error processing request:', error);
         return NextResponse.json({
             error: 'Failed to process request',

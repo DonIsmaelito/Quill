@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
 import { CameraCapture } from "./CameraCapture";
 import LanguageSelector from "./LanguageSelector";
+import { API_ENDPOINTS } from "../config/api";
 
 // Not exactly the same as in Index.tsx
 interface FormField {
@@ -851,8 +852,8 @@ export function AssistantPanel({
       return wsRef.current;
     }
 
-    console.log("Creating new WebSocket connection...");
-    const ws = new WebSocket("ws://localhost:8000/voice_ws");
+        console.log("Creating new WebSocket connection...");
+    const ws = new WebSocket(API_ENDPOINTS.VOICE_WS);
 
     const playNextAudio = () => {
       if (audioQueueRef.current.length === 0) {

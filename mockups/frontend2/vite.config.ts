@@ -6,6 +6,9 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+// Import API configuration
+import { API_ENDPOINTS } from './src/config/api';
+
 function assignmentApiPlugin() {
   return {
     name: "assignment-api",
@@ -117,7 +120,7 @@ function assignmentApiPlugin() {
             });
 
             // Create admin URL with form ID parameter
-            const adminUrl = `http://localhost:8080/view-filled-form/${formId}`;
+            const adminUrl = `${API_ENDPOINTS.ADMIN_URL}/view-filled-form/${formId}`;
             
             // Email content for clinician notification
             const mailOptions = {

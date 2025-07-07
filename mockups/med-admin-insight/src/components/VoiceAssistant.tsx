@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { API_ENDPOINTS } from "../config/api";
 
 interface VoiceAssistantProps {
   className?: string;
@@ -57,7 +58,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
   const initWebSocket = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return wsRef.current;
 
-    const ws = new WebSocket("ws://localhost:8000/clinic_voice_ws");
+    const ws = new WebSocket(API_ENDPOINTS.CLINIC_VOICE_WS);
 
     ws.onopen = () => {
       console.log("Voice assistant connected");

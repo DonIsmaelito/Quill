@@ -1,10 +1,11 @@
 """
-EHR API for Mini-EHR System
+Main FastAPI Application for Mini-EHR System
 Provides endpoints for form submission and patient profile management
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import logging
@@ -19,8 +20,21 @@ from .form_processor import FormProcessor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/ehr", tags=["EHR"])
+# Create FastAPI app
+app = FastAPI(
+    title="Mini-EHR API",
+    description="A mini Electronic Health Record system API",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure this properly for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize managers
 db_manager = SupabaseManager()
@@ -40,7 +54,7 @@ class PatientQuery(BaseModel):
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "mockups", "frontend2", "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-@router.post("/submit-form")
+@app.post("/ehr/submit-form")
 async def submit_form(submission: FormSubmission, background_tasks: BackgroundTasks):
     """
     Submit a form and process it to update the EHR.
@@ -100,7 +114,7 @@ async def submit_form(submission: FormSubmission, background_tasks: BackgroundTa
         logger.error(f"Error submitting form: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Form submission failed: {str(e)}")
 
-@router.post("/create-patient-profile")
+@app.post("/ehr/create-patient-profile")
 async def create_patient_profile(patient_data: Dict[str, Any]):
     """
     Create a new patient profile in the EHR.
@@ -122,7 +136,7 @@ async def create_patient_profile(patient_data: Dict[str, Any]):
         logger.error(f"Error creating patient profile: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Profile creation failed: {str(e)}")
 
-@router.post("/get-patient-profile")
+@app.post("/ehr/get-patient-profile")
 async def get_patient_profile(query: PatientQuery):
     """
     Get complete patient profile from the EHR.
@@ -153,7 +167,7 @@ async def get_patient_profile(query: PatientQuery):
         logger.error(f"Error getting patient profile: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve profile: {str(e)}")
 
-@router.post("/update-patient-data")
+@app.post("/ehr/update-patient-data")
 async def update_patient_data(update_data: Dict[str, Any]):
     """
     Update specific patient data in the EHR.
@@ -169,6 +183,9 @@ async def update_patient_data(update_data: Dict[str, Any]):
         
         if not all([table_name, field_name]):
             raise HTTPException(status_code=400, detail="Table name and field name are required")
+        
+        if not type(table_name) is str or not type(field_name) is str:
+            raise HTTPException(status_code=400, detail="Table name and field name must be strings")
         
         # Update or append field
         success = db_manager.update_or_append_field(
@@ -186,12 +203,12 @@ async def update_patient_data(update_data: Dict[str, Any]):
         logger.error(f"Error updating patient data: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
-@router.get("/health")
+@app.get("/ehr/health")
 async def health_check():
     """Check if the EHR service is running."""
     return {"status": "healthy", "service": "Mini-EHR API"}
 
-@router.post("/initialize-tables")
+@app.post("/ehr/initialize-tables")
 async def initialize_tables():
     """
     Initialize all required tables in Supabase.
@@ -206,4 +223,25 @@ async def initialize_tables():
         }
     except Exception as e:
         logger.error(f"Error initializing tables: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Table initialization failed: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Table initialization failed: {str(e)}")
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint for the API."""
+    return {
+        "message": "Mini-EHR API is running",
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/ehr/health",
+            "submit_form": "/ehr/submit-form",
+            "create_patient": "/ehr/create-patient-profile",
+            "get_patient": "/ehr/get-patient-profile",
+            "update_patient": "/ehr/update-patient-data",
+            "initialize_tables": "/ehr/initialize-tables"
+        }
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000) 

@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ragService } from "../../../frontend2/src/services/ragService";
+import { ragService } from "../services/ragService";
 import { FormField } from "../types/form";
 import { DigitizedForm } from "../components/DigitizedForm";
 import { processFormData } from "../utils/formProcessing";

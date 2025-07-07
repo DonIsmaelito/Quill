@@ -24,7 +24,7 @@ const ChatView = ({ onBack, messages, onMessagesUpdate }: ChatViewProps) => {
       // Add user message immediately
       const updatedMessages = [
         ...messages,
-        { type: 'user', content: messageText }
+        { type: 'user' as const, content: messageText }
       ];
       onMessagesUpdate(updatedMessages);
 

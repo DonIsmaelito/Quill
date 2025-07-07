@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "functions": {
+    "api/ehr/index.py": {
+      "runtime": "@vercel/python@4.7.2"
+    },
+    "api/rag/index.py": {
+      "runtime": "@vercel/python@4.7.2"
+    }
+  }
+}

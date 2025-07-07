@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { patientsData, Patient } from "@/data/patients"; // Assuming Patient type is exported from patients.ts
 import { Search, UserPlus, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { API_ENDPOINTS } from "../config/api";
 
 export default function AssignTemplatePage() {
   const { templateId, templateName } = useParams<{ templateId: string; templateName?: string }>();
@@ -149,7 +150,7 @@ export default function AssignTemplatePage() {
                             
                             // For demo purposes, use the specified email
                             const patientEmail = "fernandesi2244@gmail.com";
-                            const formUrl = "http://localhost:5173/";
+                            const formUrl = API_ENDPOINTS.FRONTEND2_FORM;
                             
                             // Get template name (you might want to load this from your templates data)
                             const templateName = decodedTemplateName;
@@ -253,7 +254,7 @@ export default function AssignTemplatePage() {
                           
                           // For demo purposes, use the specified email
                           const patientEmail = "fernandesi2244@gmail.com";
-                          const formUrl = "http://localhost:5173/";
+                          const formUrl = API_ENDPOINTS.FRONTEND2_FORM;
                           
                           // Get template name (you might want to load this from your templates data)
                           const templateName = decodedTemplateName;

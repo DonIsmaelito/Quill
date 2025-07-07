@@ -1,22 +1,5 @@
 import { NextResponse } from "next/server";
-import path from "path";
-import fs from "fs/promises";
 import axios from "axios";
-
-// Add new interfaces
-interface FormFieldValue {
-  id: string;
-  label: string;
-  value: any;
-}
-
-interface UserInfo {
-  [key: string]: any;
-}
-
-// Add new file paths
-const USER_INFO_PATH = path.join("..", "..", "uploads", "user_info.json");
-const FORM_VALUES_PATH = path.join("..", "..", "uploads", "form_values.json");
 
 // Define FastAPI server URL
 const FASTAPI_URL = "http://localhost:8000";
@@ -26,103 +9,103 @@ const FASTAPI_URL = "http://localhost:8000";
  * @param message The user's message
  * @returns Boolean indicating if this is an update request
  */
-function isUpdateRequest(message: string): boolean {
-  // convert to lowercase for easier matching
-  const lowerMessage = message.toLowerCase();
+// function isUpdateRequest(message: string): boolean {
+//   // convert to lowercase for easier matching
+//   const lowerMessage = message.toLowerCase();
 
-  console.log("Checking if message is an update request:", lowerMessage);
+//   console.log("Checking if message is an update request:", lowerMessage);
 
-  // keywords and phrases that suggest the user wants to update their info
-  const updateKeywords = [
-    "update",
-    "change",
-    "modify",
-    "correct",
-    "fix",
-    "edit",
-    "wrong",
-    "incorrect",
-    "mistake",
-    "error",
-    "not right",
-    "is not",
-    "instead of",
-    "should be",
-    "actually",
-    "instead",
-    "my real",
-    "my actual",
-    "my correct",
-    "add",
-    "remove",
-  ];
+//   // keywords and phrases that suggest the user wants to update their info
+//   const updateKeywords = [
+//     "update",
+//     "change",
+//     "modify",
+//     "correct",
+//     "fix",
+//     "edit",
+//     "wrong",
+//     "incorrect",
+//     "mistake",
+//     "error",
+//     "not right",
+//     "is not",
+//     "instead of",
+//     "should be",
+//     "actually",
+//     "instead",
+//     "my real",
+//     "my actual",
+//     "my correct",
+//     "add",
+//     "remove",
+//   ];
 
-  // information types that might be updated
-  const infoTypes = [
-    "name",
-    "address",
-    "phone",
-    "email",
-    "number",
-    "info",
-    "information",
-    "birth",
-    "date",
-    "ssn",
-    "social",
-    "id",
-    "identifier",
-    "password",
-    "contact",
-    "details",
-    "data",
-    "profile",
-    "record",
-  ];
+//   // information types that might be updated
+//   const infoTypes = [
+//     "name",
+//     "address",
+//     "phone",
+//     "email",
+//     "number",
+//     "info",
+//     "information",
+//     "birth",
+//     "date",
+//     "ssn",
+//     "social",
+//     "id",
+//     "identifier",
+//     "password",
+//     "contact",
+//     "details",
+//     "data",
+//     "profile",
+//     "record",
+//   ];
 
-  // check for direct update requests
-  for (const keyword of updateKeywords) {
-    // check for keyword with space on either side
-    if (lowerMessage.includes(` ${keyword} `)) {
-      console.log("Found update keyword:", keyword);
-      for (const infoType of infoTypes) {
-        if (lowerMessage.includes(infoType)) {
-          return true;
-        }
-      }
+//   // check for direct update requests
+//   for (const keyword of updateKeywords) {
+//     // check for keyword with space on either side
+//     if (lowerMessage.includes(` ${keyword} `)) {
+//       console.log("Found update keyword:", keyword);
+//       for (const infoType of infoTypes) {
+//         if (lowerMessage.includes(infoType)) {
+//           return true;
+//         }
+//       }
 
-      // Even without specific info type, these strongly suggest updates
-      if (
-        keyword === "update" ||
-        keyword === "change" ||
-        keyword === "modify" ||
-        keyword === "fix" ||
-        keyword === "correct"
-      ) {
-        return true;
-      }
-    }
-  }
+//       // Even without specific info type, these strongly suggest updates
+//       if (
+//         keyword === "update" ||
+//         keyword === "change" ||
+//         keyword === "modify" ||
+//         keyword === "fix" ||
+//         keyword === "correct"
+//       ) {
+//         return true;
+//       }
+//     }
+//   }
 
-  // Check for correction patterns
-  if (lowerMessage.includes("not") && lowerMessage.includes("but")) {
-    console.log("Found not/but pattern");
-    return true;
-  }
+//   // Check for correction patterns
+//   if (lowerMessage.includes("not") && lowerMessage.includes("but")) {
+//     console.log("Found not/but pattern");
+//     return true;
+//   }
 
-  if (
-    lowerMessage.includes("it's") ||
-    lowerMessage.includes("its") ||
-    lowerMessage.includes("should be") ||
-    lowerMessage.includes("is actually")
-  ) {
-    console.log("Found it's/its pattern");
-    return true;
-  }
+//   if (
+//     lowerMessage.includes("it's") ||
+//     lowerMessage.includes("its") ||
+//     lowerMessage.includes("should be") ||
+//     lowerMessage.includes("is actually")
+//   ) {
+//     console.log("Found it's/its pattern");
+//     return true;
+//   }
 
-  // Default to false - assume query if no update indicators found
-  return false;
-}
+//   // Default to false - assume query if no update indicators found
+//   return false;
+// }
 
 // Add CORS headers to response
 function addCorsHeaders(response: NextResponse) {
@@ -231,7 +214,7 @@ export async function POST(request: Request) {
       }
 
       // Determine if this is an update request or a regular query
-      const isUpdate = isUpdateRequest(message);
+      // const isUpdate = isUpdateRequest(message);
       // const endpoint = isUpdate ? 'update' : 'query';
       const endpoint = "query"; // Always use 'query' for now until we update (TODO)
       console.log(`Message classified as ${endpoint} request:`, message);
@@ -264,21 +247,24 @@ export async function POST(request: Request) {
           }
         );
 
-        if (endpoint === "update") {
-          return addCorsHeaders(
-            NextResponse.json({
-              content:
-                response.data.content ||
-                `I've updated your information. ${response.data.message || ""}`,
-              wasUpdate: true,
-              ...response.data,
-            })
-          );
-        } else {
-          return addCorsHeaders(
-            NextResponse.json({ content: response.data.content })
-          );
-        }
+        // if (endpoint === "update") {
+        //   return addCorsHeaders(
+        //     NextResponse.json({
+        //       content:
+        //         response.data.content ||
+        //         `I've updated your information. ${response.data.message || ""}`,
+        //       wasUpdate: true,
+        //       ...response.data,
+        //     })
+        //   );
+        // } else {
+        //   return addCorsHeaders(
+        //     NextResponse.json({ content: response.data.content })
+        //   );
+        // }
+        return addCorsHeaders(
+          NextResponse.json({ content: response.data.content })
+        );
       } catch (error: any) {
         console.error(
           `Error calling FastAPI ${endpoint} endpoint:`,
@@ -350,7 +336,7 @@ export async function POST(request: Request) {
         const formValues = JSON.parse(values);
 
         // Call the FastAPI update-form-values endpoint
-        const response = await axios.post(`${FASTAPI_URL}/update-form-values`, {
+        await axios.post(`${FASTAPI_URL}/update-form-values`, {
           values: formValues,
         });
 
@@ -410,7 +396,7 @@ export async function POST(request: Request) {
         const userInfo = JSON.parse(info);
 
         // Call the FastAPI update-user-info endpoint
-        const response = await axios.post(`${FASTAPI_URL}/update-user-info`, {
+        await axios.post(`${FASTAPI_URL}/update-user-info`, {
           info: userInfo,
         });
 
@@ -475,11 +461,11 @@ export async function POST(request: Request) {
       // Set up the API form data
       const apiFormData = new FormData();
       apiFormData.append("description", description);
-      
+
       if (category) {
         apiFormData.append("category", category);
       }
-      
+
       if (audience) {
         apiFormData.append("audience", audience);
       }

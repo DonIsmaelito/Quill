@@ -31,7 +31,7 @@ const ChatInput = ({ onSendMessage, isLoading = false, onAgentResponse, onSilent
   const tooltip2Timer = useRef<NodeJS.Timeout | null>(null);
 
   // Helper function to check if a field should be excluded
-  const shouldIncludeField = (key: string, value: any): boolean => {
+  const shouldIncludeField = (key: string, value: unknown): boolean => {
     // Exclude fields that are file paths
     if (typeof value === 'string' && value.includes('vector_db')) return false;
     
@@ -138,7 +138,7 @@ const ChatInput = ({ onSendMessage, isLoading = false, onAgentResponse, onSilent
       addDocument({
         name: file.name,
         type: determineDocumentType(file.name),
-        id: Date.now(),
+        // id: Date.now(),
       });
 
       setUploadStatus('success');
@@ -151,7 +151,7 @@ const ChatInput = ({ onSendMessage, isLoading = false, onAgentResponse, onSilent
           setFormFilePath(responseData.filledFormPath);
         } else {
           // Fallback to constructing the path if it's not returned
-          const fileNameWithoutExt = file.name.split('.').slice(0, -1).join('.');
+          // const fileNameWithoutExt = file.name.split('.').slice(0, -1).join('.');
           const filledFormPath = file.name.split('.').slice(0, -1).join('.') + '_filled.pdf';
           setFormFilePath(filledFormPath);
         }
@@ -199,7 +199,7 @@ const ChatInput = ({ onSendMessage, isLoading = false, onAgentResponse, onSilent
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Full upload error:', error);
       setUploadStatus('error');
       setUploadError(error.message || 'Failed to upload document');

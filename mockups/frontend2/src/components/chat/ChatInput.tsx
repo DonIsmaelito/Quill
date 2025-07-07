@@ -3,6 +3,7 @@ import { Upload, ClipboardEdit, Mic, AudioWaveform } from "lucide-react";
 import { ragService } from "../../services/ragService";
 import UploadModal from "./UploadModal";
 import FormPreviewModal from "./FormPreviewModal";
+import { API_ENDPOINTS } from "../../config/api";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -359,8 +360,8 @@ const ChatInput = ({
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)
       return wsRef.current;
 
-    console.log("Creating new WebSocket connection...");
-    wsRef.current = new WebSocket("ws://localhost:8000/voice_ws");
+        console.log("Creating new WebSocket connection...");
+    wsRef.current = new WebSocket(API_ENDPOINTS.VOICE_WS);
 
     wsRef.current.onopen = () => {
       console.log("Voice WebSocket connected");

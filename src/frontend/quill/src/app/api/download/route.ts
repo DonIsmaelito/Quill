@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     // Try to find the file in any of the possible upload directories
     let fileFound = false;
     let fullPath = '';
-    let attempts = [];
+    const attempts = [];
 
     for (const uploadsDir of possibleUploadDirs) {
       const testPath = path.join(uploadsDir, fileName);
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         break;
       } catch (error) {
         // File not found in this directory, try next
-        console.log(`File not found in ${testPath}`);
+        console.error(`Error accessing file at ${testPath}:`, error);
       }
     }
 
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${fileName}"`,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Download error:', error);
     return NextResponse.json({ 
       error: 'Failed to download file',

@@ -6,6 +6,9 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
+// Import API configuration
+import { API_ENDPOINTS } from './src/config/api';
+
 // Custom plugin to handle file system operations in development
 const fileSystemPlugin = () => {
   return {
@@ -80,7 +83,7 @@ const fileSystemPlugin = () => {
                   JSON.parse(body);
 
                 // Create form URL with template ID parameter
-                const formUrl = `http://localhost:5173/?template=${templateId}`;
+                const formUrl = `${API_ENDPOINTS.FRONTEND2_FORM}?template=${templateId}`;
 
                 // Create email transporter using Gmail SMTP
                 const transporter = nodemailer.createTransport({

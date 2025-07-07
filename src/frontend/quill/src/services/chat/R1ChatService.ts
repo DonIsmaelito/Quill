@@ -1,7 +1,7 @@
 import { ChatService } from './ChatService';
 
 export class R1ChatService implements ChatService {
-  async generateResponse(message: string, context: any): Promise<string> {
+  async generateResponse(message: string, context: unknown): Promise<string> {
     console.log('R1ChatService: Sending message:', message);
     try {
       const response = await fetch('/api/chat', {

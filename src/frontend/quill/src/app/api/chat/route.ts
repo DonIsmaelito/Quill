@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     console.log('API Route: Cleaned response:', cleanedResponse);
     return NextResponse.json({ content: cleanedResponse });
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Route: Error:', error);
     return NextResponse.json(
       { 

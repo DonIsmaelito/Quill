@@ -1,0 +1,22 @@
+[
+  {
+    "id": "header-1751216516164",
+    "label": "Mental health check",
+    "value": "MISSING"
+  },
+  {
+    "id": "subheader-1751216546321",
+    "label": "Symptoms",
+    "value": "Symptoms"
+  },
+  {
+    "id": "checkbox-1751216552690",
+    "label": "Drowsiness",
+    "value": true
+  },
+  {
+    "id": "checkbox-1751216570203",
+    "label": "Unwillingness to do things",
+    "value": "MISSING"
+  }
+]

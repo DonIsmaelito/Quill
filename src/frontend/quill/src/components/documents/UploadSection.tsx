@@ -44,11 +44,11 @@ const UploadSection = () => {
       addDocument({
         name: file.name,
         type: determineDocumentType(file.name),
-        id: Date.now(), // Adding an id since your interface requires it
+        // id: Date.now(), // Adding an id since your interface requires it
       });
 
       setUploadStatus('Document uploaded successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Full upload error:', error);
       setUploadStatus(error.message || 'Failed to upload document');
     } finally {

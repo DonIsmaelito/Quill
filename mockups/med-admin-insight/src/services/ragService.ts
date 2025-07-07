@@ -1,3 +1,8 @@
+/*
+Make sure this is in sync with the version from frontend2.
+Duplicating for now just to get the monorepo up in Vercel.
+*/
+
 // API base URL - this should point to your quill server
 import { API_ENDPOINTS } from '../config/api';
 
